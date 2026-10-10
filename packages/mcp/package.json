@@ -1,0 +1,24 @@
+{
+  "name": "spielebox-mcp",
+  "version": "0.0.0",
+  "description": "MCP server for the WIENXTRA-Spielebox online catalog",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "spielebox-mcp": "./dist/index.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "node dist/index.mjs"
+  },
+  "dependencies": {
+    "@janpaepke/spielebox-client": "workspace:*",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "zod": "^4.6.5"
+  }
+}

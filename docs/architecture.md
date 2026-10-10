@@ -1,20 +1,33 @@
 # Architecture (proposal)
 
-Status: **proposal, not built yet** (2026-10-10). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
+Status: **proposal; workspace scaffolded** (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
 [research/](research/): a [survey of existing library MCP servers](research/mcp-server-survey.md),
 [best practices](research/best-practices.md) and the [client stack](research/client-stack.md).
-Open decisions are marked **[decide]**.
+Open decisions are marked **[decide]** (none at the moment).
 
 ## Goals
 
 - A reusable, typed **client** for the WIENXTRA OPAC. It doesn't depend on MCP and can be used from a CLI, scripts or other apps.
 - A **thin MCP server** on top. Each tool is the client's zod schemas plus a one-line call to the client.
-- The **binding pre-order** must never happen without a human confirming it in the client UI.
-- Build in iterations: read-only first, then the wishlist (Merkliste), then the pre-order.
+- The **binding reservation request** must never be sent without a human confirming it in the client UI.
+- Build in iterations: read-only first, then the reservation list, then the reservation request.
+
+## Glossary
+
+The site's own terms are ambiguous, so this project uses these terms consistently in code, tools and docs:
+
+| Term (ours) | Site term | Meaning |
+|---|---|---|
+| **reservation list** | Merkliste | The games staged for the *next* reservation request. Short-lived: on the site it lives in the PHP session and expires after 24 min idle. |
+| **reservation request** | Vorbestellung, Onlinereservierung, Reservierungsanfrage | Submitting the reservation list with contact data. Binding for the user, but only a *request*: staff confirm it by e-mail. |
+| **wishlist** | – | A long-term personal list of games someone wants to play some day. **Not in scope**, and never called that in this project to avoid confusion. If ever added, it would be persistent and separate from the reservation list. |
+| **game** | Medium, Titel | One catalog title (`id` / `titleNo`). |
+| **copy** | Mediennummer | One physical copy of a game, with its own availability status. |
 
 ## Stack
 
-TypeScript, ESM-only, Node ≥ 22. A pnpm workspace with two packages.
+TypeScript, ESM-only, Node ≥ 22. A pnpm workspace with two packages: `@janpaepke/spielebox-client` and `spielebox-mcp`.
+Both are `private` for now, and publishing to npm is undecided.
 
 | Concern | Choice | Why |
 |---|---|---|
@@ -26,7 +39,7 @@ TypeScript, ESM-only, Node ≥ 22. A pnpm workspace with two packages.
 | MCP | `@modelcontextprotocol/server` 2.x (spec 2026-07-28), pinned to the major | Stable v2. Supports `inputRequired` elicitation and signed `requestState`. |
 | Tests | `vitest` | See Testing. |
 | Build | `tsdown` | `tsup` is no longer maintained. |
-| TS / lint | **[decide]** TS 7 + Biome, *or* TS ~6.0 + typescript-eslint | typescript-eslint doesn't support TS ≥ 6.1 yet. |
+| TS / lint | TS 7 + Biome | typescript-eslint doesn't support TS ≥ 6.1 yet. tsdown's declaration build works on TS 7 but warns that its compiler API is still experimental. |
 
 Python alternative: httpx + selectolax + pydantic + `mcp>=2,<3`. It works equally well but fits the existing zod/npx setup less well.
 
@@ -78,7 +91,7 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 | Data | TTL | Notes |
 |---|---|---|
 | Game metadata (title, description, players, …) | until the next nightly import (≈ 03:00 Europe/Vienna), LRU ≈ 2k | Rarely changes. |
-| Availability (status of each copy) | ≤ 120 s, never served stale | Always returned with `asOf`. Re-fetched before any pre-order. |
+| Availability (status of each copy) | ≤ 120 s, never served stale | Always returned with `asOf`. Re-fetched before any reservation request. |
 | Search results | 60–120 s | |
 | Facet label → id maps | until the next nightly import | Throw away the whole map on any mismatch. |
 | Locator index | LRU ≈ 2k, no TTL | Just term + title, so it's tiny. |
@@ -91,24 +104,28 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 | `get_games` (≤ 10 ids) | 1 | readOnly, openWorld |
 | `list_filters` | 1 | readOnly, openWorld |
 | `list_new_games` | 1 | readOnly, openWorld |
-| `wishlist_add` / `wishlist_remove` / `wishlist_show` | 2 | not readOnly, not destructive, idempotent (add/remove) |
-| `request_preorder` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true` |
+| `reservation_list_add` / `_remove` / `_show` / `_clear` | 2 | not readOnly, not destructive, idempotent |
+| `submit_reservation_request` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true` |
 
 Tools return structured content plus a short text summary. They have a concise/detailed option and errors that tell the model what to do next.
 Tool descriptions stay under 2,048 characters, which is where Claude Code truncates them.
 
-## Wishlist (phase 2)
+## Reservation list (phase 2)
 
-The Merkliste lives in the PHP session, and `basket=add` only works for ids in the session's current result set. So the wishlist
-is kept **in our own process**: a list of ids plus their locators, deduplicated, because the server doesn't dedupe.
-**[decide]** in memory only, or persisted to a small JSON file so it survives restarts.
+On the site, the Merkliste lives **server-side in the PHP session**. The browser only holds the session cookie, and the list is gone
+after 24 minutes idle. This was verified with curl, which has no browser storage: the list survived across requests through the cookie alone.
+`basket=add` also only works for ids in the session's current result set.
 
-## Pre-order (phase 3)
+So our reservation list is kept **in our own process**: a list of ids plus their locators, deduplicated, because the server doesn't dedupe.
+It is only sent to the site when a request is submitted. It stays **in memory**, like the site's: it is a staging area for one
+reservation request, not a long-term list (see Glossary → wishlist).
+
+## Reservation request (phase 3)
 
 The order is a binding request that the staff process by hand by e-mail. A successful submit means "request sent", not "reserved".
 The tool says exactly that.
 
-Steps in the client (`submitPreorder(items, contact)`):
+Steps in the client (`submitReservationRequest(items, contact)`):
 1. Start a fresh session.
 2. For each locator group: search, then `basket=add` each id.
 3. `GET orderbasket`, then check the order-ability marker (ok/notok) for each item and abort if anything is unexpected.
@@ -147,5 +164,5 @@ A script refreshes the fixtures from the live site and trims them.
 ## Iterations
 
 1. **v0.1:** client read-only + MCP read tools + tests.
-2. **v0.2:** wishlist.
-3. **v0.3:** pre-order with consent. The first real order is a deliberate, user-approved test that records the success page.
+2. **v0.2:** reservation list.
+3. **v0.3:** reservation request with consent. The first real order is a deliberate, user-approved test that records the success page.

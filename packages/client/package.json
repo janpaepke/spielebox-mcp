@@ -1,0 +1,24 @@
+{
+  "name": "@janpaepke/spielebox-client",
+  "version": "0.0.0",
+  "description": "Typed client for the WIENXTRA-Spielebox online catalog (opac.wienxtra.at)",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "p-queue": "^9.3.3",
+    "zod": "^4.6.5"
+  }
+}
