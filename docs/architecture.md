@@ -1,6 +1,6 @@
 # Architecture (proposal)
 
-Status: **v0.1 (read-only) implemented**; reservation list and reservation request are proposals (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
+Status: **v0.1 (read-only) and v0.2 (reservation list) implemented**; the reservation request is a proposal (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
 [research/](research/): a [survey of existing library MCP servers](research/mcp-server-survey.md),
 [best practices](research/best-practices.md) and the [client stack](research/client-stack.md).
 Open decisions are marked **[decide]** (none at the moment).
@@ -121,7 +121,7 @@ Each tool takes the client's schema as `inputSchema` and `outputSchema` and rela
 the error code, so the model can react. Server instructions explain the search semantics. Tool descriptions stay under 2,048 characters,
 which is where Claude Code truncates them.
 
-## Reservation list (phase 2)
+## Reservation list (phase 2, implemented)
 
 On the site, the Merkliste lives **server-side in the PHP session**. The browser only holds the session cookie, and the list is gone
 after 24 minutes idle. This was verified with curl, which has no browser storage: the list survived across requests through the cookie alone.
@@ -130,6 +130,11 @@ after 24 minutes idle. This was verified with curl, which has no browser storage
 So our reservation list is kept **in our own process**: a list of ids plus their locators, deduplicated, because the server doesn't dedupe.
 It is only sent to the site when a request is submitted. It stays **in memory**, like the site's: it is a staging area for one
 reservation request, not a long-term list (see Glossary → wishlist).
+
+Implementation: `addToReservationList`, `removeFromReservationList`, `clearReservationList`, `getReservationList` on the client.
+Adding resolves each id through `getGames`, so only games the client has seen can be added, and the result shows current
+availability. The locators of listed games are **pinned** outside the LRU, so a long session can't evict them before submission.
+The list holds at most 30 games, only to keep memory bounded; the site's own limit is unknown.
 
 ## Reservation request (phase 3)
 

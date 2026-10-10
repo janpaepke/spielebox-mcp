@@ -176,3 +176,50 @@ describe("newGames", () => {
     expect(result.total).toBeGreaterThan(20);
   });
 });
+
+describe("reservation list", () => {
+  it("adds known games once, in order, with availability", async () => {
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [MENSCHHEIT] });
+    const list = await client.addToReservationList({ ids: [CONNECT, MENSCHHEIT] });
+    expect(list.items.map((i) => i.title)).toEqual(["ABENTEUER MENSCHHEIT", "CATAN Connect"]);
+    expect(list.items[1]).toMatchObject({ availableCopies: 2, onlineReservationRequired: false });
+    expect(list.notFound).toEqual([]);
+  });
+
+  it("doesn't add ids it can't resolve", async () => {
+    const list = await client.addToReservationList({ ids: [CONNECT] });
+    expect(list.items).toEqual([]);
+    expect(list.notFound).toHaveLength(1);
+  });
+
+  it("removes and clears without contacting the catalog", async () => {
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [CONNECT, MENSCHHEIT] });
+    const requests = opac.log.length;
+    expect((await client.removeFromReservationList({ ids: [CONNECT] })).items.map((i) => i.id)).toEqual([MENSCHHEIT]);
+    expect((await client.clearReservationList()).items).toEqual([]);
+    expect(opac.log).toHaveLength(requests);
+  });
+
+  it("refreshes availability when shown after the cache expired, even across sessions", async () => {
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [CONNECT] });
+    await client.search({ term: "catan connect" });
+    clock += 25 * 60_000;
+    opac.expireSessions();
+    const list = await client.getReservationList();
+    expect(list.items).toHaveLength(1);
+    expect(list.asOf).toBe(new Date(clock).toISOString());
+    expect(opac.log.at(-1)).toBe(`media=${CONNECT}`);
+  });
+
+  it("refuses to grow beyond its limit", async () => {
+    await client.search({ term: "catan", limit: 100 });
+    const ids = (await client.search({ term: "catan", limit: 31 })).games.map((g) => g.id);
+    await expect(client.addToReservationList({ ids: ids.slice(0, 20) })).resolves.toBeDefined();
+    await expect(client.addToReservationList({ ids: ids.slice(20, 31) })).rejects.toMatchObject({
+      code: "RESERVATION_LIST_FULL",
+    });
+  });
+});

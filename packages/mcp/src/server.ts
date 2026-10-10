@@ -3,6 +3,8 @@ import {
   GetGamesParams,
   GetGamesResult,
   NewGamesParams,
+  ReservationList,
+  ReservationListChange,
   SearchParams,
   SearchResult,
   type SpieleboxClient,
@@ -13,16 +15,29 @@ import * as z from "zod";
 import pkg from "../package.json" with { type: "json" };
 
 /** The client methods the server relays to. */
-export type CatalogClient = Pick<SpieleboxClient, "search" | "getGames" | "getFilters" | "newGames">;
+export type CatalogClient = Pick<
+  SpieleboxClient,
+  | "search"
+  | "getGames"
+  | "getFilters"
+  | "newGames"
+  | "addToReservationList"
+  | "removeFromReservationList"
+  | "clearReservationList"
+  | "getReservationList"
+>;
 
 const INSTRUCTIONS = `Tools for the WIENXTRA-Spielebox in Vienna, Austria's largest board game library (~9000 games, lent for free or a small fee).
 Catalog data is German. Typical flow: search_games (or list_new_games) → get_games for per-copy availability.
 - Search terms match as a contiguous substring of title, author, description and keywords. No AND/OR or wildcards: search one distinctive word or the exact title fragment ("flügelschlag", "die siedler").
 - Filter with players/age/maxDuration/availableOnly; use list_filters to discover keywords like "Kooperationsspiele" or "ausgezeichnet" (award-winning).
 - Availability changes often; every result has an asOf time. Game ids are only valid for this server instance after a search found them.
-- onlineReservationRequired: the game must be reserved online before pickup (reservation is not supported by these tools yet).`;
+- onlineReservationRequired: the game must be reserved online before pickup.
+- The reservation list stages games for a reservation request (the catalog's "Merkliste"); it lives in this server's memory. Submitting a reservation request isn't supported yet: the user has to reserve on https://opac.wienxtra.at/?location=sb.`;
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+/** Changes only the in-memory reservation list, never the catalog. */
+const LOCAL_CHANGE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 
 /** Builds the MCP server. Each tool validates with the client's schemas and relays to one client method. */
 export function createServer(client: CatalogClient): McpServer {
@@ -77,6 +92,53 @@ export function createServer(client: CatalogClient): McpServer {
       annotations: READ_ONLY,
     },
     (params) => relay(() => client.newGames(params)),
+  );
+
+  server.registerTool(
+    "reservation_list_add",
+    {
+      title: "Add to reservation list",
+      description:
+        "Stage games for the next reservation request. Ids must come from earlier results. Returns the list with current availability.",
+      inputSchema: ReservationListChange,
+      outputSchema: ReservationList,
+      annotations: { ...LOCAL_CHANGE, openWorldHint: true },
+    },
+    (params) => relay(() => client.addToReservationList(params)),
+  );
+
+  server.registerTool(
+    "reservation_list_remove",
+    {
+      title: "Remove from reservation list",
+      description: "Remove games from the reservation list.",
+      inputSchema: ReservationListChange,
+      outputSchema: ReservationList,
+      annotations: LOCAL_CHANGE,
+    },
+    (params) => relay(() => client.removeFromReservationList(params)),
+  );
+
+  server.registerTool(
+    "reservation_list_show",
+    {
+      title: "Show reservation list",
+      description: "The games staged for the next reservation request, with current availability.",
+      outputSchema: ReservationList,
+      annotations: READ_ONLY,
+    },
+    () => relay(() => client.getReservationList()),
+  );
+
+  server.registerTool(
+    "reservation_list_clear",
+    {
+      title: "Clear reservation list",
+      description: "Remove all games from the reservation list.",
+      outputSchema: ReservationList,
+      annotations: { ...LOCAL_CHANGE, destructiveHint: true },
+    },
+    () => relay(() => client.clearReservationList()),
   );
 
   return server;
