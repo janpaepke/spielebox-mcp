@@ -26,7 +26,12 @@ against the live site unless marked otherwise.
 | Imprint | `imprint=true` | |
 | Merkliste / pre-order | `basket=add\|remove&media=<md5>`, `basketinfo`, `showbasket`, `orderbasket`, `deletebasket` | Session-based basket → online pre-order form. See [Merkliste & pre-order](#merkliste--pre-order). |
 
-Session cookie: `wienXtraopac` (PHP session, `Max-Age=1440` = 24 min idle). Language cookie `lang=de`.
+Session cookie: `wienXtraopac` (PHP session, `Max-Age=1440` = 24 min idle). It is set on the first `200` response (no redirect), and the
+session id never appears in URLs. Language cookie `lang=de`.
+
+Responses are `text/html; charset=utf-8` and `Cache-Control: no-cache, must-revalidate` (HTTP caching is useless). Query parameters must be
+**UTF-8** percent-encoded: `Fl%C3%BCgelschlag` finds FLÜGELSCHLAG, while Latin-1 `Fl%FCgelschlag` returns an empty page. A search with a single
+hit renders the normal list (no redirect to the detail page).
 
 ### Locations
 
@@ -110,7 +115,11 @@ Consequences for the client:
 - An order is a **request**, not a booking. Success can only mean "the form was accepted", and the real confirmation is a human e-mail.
 - Signatur, NSO and per-copy reservation status are internal data. They never appear in the public OPAC HTML.
 
-**Still unknown:** the page shown after POST (success or validation error), and whether items that can't be pre-ordered block the order.
+After POST the page showed a success message saying a confirmation would follow. This is from memory; the exact
+markup and wording are not recorded.
+
+**Still unknown:** the exact success markup, validation error pages, and whether items that can't be pre-ordered block the order.
+Capture these on the first real order made through the client.
 
 Site rules (home page): order at least one day before pickup; pick up within 3 working days.
 
