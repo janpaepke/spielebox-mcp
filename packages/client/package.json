@@ -14,10 +14,14 @@
   "scripts": {
     "build": "tsdown",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "fixtures": "node scripts/refresh-fixtures.ts",
+    "test:live": "SPIELEBOX_LIVE=1 vitest run test/live.test.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "domhandler": "^5.0.3",
+    "lru-cache": "^11.5.3",
     "p-queue": "^9.3.3",
     "zod": "^4.6.5"
   }
