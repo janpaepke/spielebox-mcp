@@ -10,7 +10,7 @@ The catalog has no API, so the client scrapes its server-rendered HTML. The MCP 
 | [`packages/client`](packages/client) (`@janpaepke/spielebox-client`) | Search, game details and availability. Later also the reservation list and reservation requests. No MCP dependency. |
 | [`packages/mcp`](packages/mcp) (`spielebox-mcp`) | MCP stdio server exposing the client as tools. |
 
-Status: v0.2: search, filters, details, new games and a local reservation list. Submitting reservation requests is not implemented yet. See [docs/architecture.md](docs/architecture.md) for the design and
+Status: v0.3: search, filters, details, new games, a reservation list, and submitting reservation requests with explicit consent (not yet used against the real catalog). See [docs/architecture.md](docs/architecture.md) for the design and
 [docs/opac-research.md](docs/opac-research.md) for how the OPAC works.
 
 ## Use with Claude Code
@@ -19,11 +19,20 @@ Not published to npm yet. Build it, then register the local build:
 
 ```sh
 pnpm install && pnpm build
-claude mcp add spielebox -- node "$(pwd)/packages/mcp/dist/index.mjs"
+claude mcp add spielebox \
+  -e SPIELEBOX_FIRST_NAME=… -e SPIELEBOX_LAST_NAME=… -e SPIELEBOX_EMAIL=… -e SPIELEBOX_PHONE=… \
+  -- node "$(pwd)/packages/mcp/dist/index.mjs"
 ```
 
-Tools: `search_games`, `get_games`, `list_filters`, `list_new_games`, and `reservation_list_add` / `_remove` / `_show` / `_clear`.
-None of them changes anything on the catalog: the reservation list lives in the server's memory.
+The contact variables are optional; they only prefill the confirmation form of a reservation request.
+
+| Tools | Effect |
+|---|---|
+| `search_games`, `get_games`, `list_filters`, `list_new_games` | Read the catalog. |
+| `reservation_list_add` / `_remove` / `_show` / `_clear` | Change a list in the server's memory, not on the catalog. |
+| `submit_reservation_request` | **Binding.** Sends the list to the Spielebox. Asks you in a form every time (games, contact data, the order form's wording), and Claude Code additionally asks for permission on every call. Needs an MCP client that supports elicitation forms. |
+
+A sent request is not a booking yet: the Spielebox staff confirm by e-mail when the games are ready.
 
 ## Development
 

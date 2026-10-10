@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+		<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+		<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="de-AT" lang="de-AT">
+		<head>
+		<title>WIENXTRA web opac</title>
+		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+		<meta name="author" content="wienXtra" />
+		<meta name="description" content="Willkommen im Onlinekatalog der WIENXTRA-Bibliothek und der Spielebox! Durch Eingabe eines oder mehrerer Suchbegriffe finden Sie das Buch oder Spiel Ihrer Wahl." />
+		<meta name="robots" content="index,follow" />
+		<link rel="shortcut icon" href="img/favicon.ico"/>
+		<link rel="icon" href="img/favicon.ico"/>
+		<link rel="stylesheet" type="text/css" media="screen" href="css/wx_opac.css" /><link rel="stylesheet" type="text/css" media="print" href="css/wx_opac_print.css" />
+		<script type="text/javascript" src="js/jquery-2.1.1.min.js"></script>
+		<script type="text/javascript" src="js/functions.js"></script>
+		<script type="text/javascript">
+
+			$(window).on({
+    		load: function() {
+        	$("#fader").fadeOut("slow","linear");
+        	$("body").removeClass("loading");
+    		}
+			});
+
+		</script>
+
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+ga('create', 'UA-11336578-16', 'wienxtra.at');
+ga('send', 'pageview');
+
+</script>
+
+<!-- Google tag (gtag.js) GA4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MHQ78VLFKV"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-MHQ78VLFKV');
+</script>
+
+		</head>
+		<body class="" onload="setFocus('sword');changeImage('searchbutton','img/bt_search_sb_de.gif');changeImage('newmedia','img/bt_search_new_sb_de.gif')">
+			<div id="fader" class="modal sb"></div>
+	    <div id="wrapper">
+        	<div id="container_top_sb">
+
+        		<div id="logo"><a href="https://opac.wienxtra.at" title="wienxtra web opac"><img title="wienXtra" alt="wienXtra" src="img/logo_sb.gif" /></a></div>
+        		<div id="title"><h1>WIENXTRA-Spielebox<br />Onlinekatalog</h1></div>
+        		<div id="simplesearch_sb">
+        				<form method="get" action="/index.php">
+        				<div class="left"><input type="hidden" name="newsearch" value="true" /><input type="hidden" name="location" value="sb"/></div>
+	    				<div class="left"><input id="sword" class="sword" onclick="clearField('sword',1)" name="sword" type="text" value="Ihr Suchbegriff" /></div>
+        				<div class="left"><input id="searchbutton" class="button" type="image" src="img/bt_search_sb_de.gif" name="search" value="suche" onmouseover="changeImage('searchbutton','img/bt_search_sb_over_de.gif')" onmouseout="changeImage('searchbutton','img/bt_search_sb_de.gif')" onmousedown="changeImage('searchbutton','img/bt_search_sb_on_de.gif')" onmouseup="changeImage('searchbutton','img/bt_search_sb_de.gif')"/></div>
+        				<div class="left"><a href="/index.php?newmedia=true&amp;newsearch=true"><img id="newmedia" src="img/bt_search_new_sb_de.gif" alt="" onmouseover="changeImage('newmedia','img/bt_search_new_over_sb_de.gif')" onmouseout="changeImage('newmedia','img/bt_search_new_sb_de.gif')" onmousedown="changeImage('newmedia','img/bt_search_new_on_sb_de.gif')" onmouseup="changeImage('newmedia','img/bt_search_new_sb_de.gif')"/></a></div>
+						</form>
+				</div>
+				<div id="infocorner">
+					<div id="version">v2.2.2d</div>
+					<div id="fontsize"><a href="http://wienxtra.at/datenschutz" target="_blank" title="Datenschutz">Datenschutz</a></div>
+					<div id="imprint"><a href="/index.php?imprint=true&amp;location=sb" title="Impressum">Impressum</a></div>
+				</div>
+			</div>
+			<div id="basket_sb">
+                <div id="basketinfo"><a href="?showbasket=true&amp;location=sb"><img src="img/notepad.png" style="margin-top:10px;" />1 Medien auf der Merkliste</a><a href="?orderbasket=true&amp;location=sb" style="margin-left:2em;"><img src="img/basket.png" style="margin-top:10px;" /> Medien der Merkliste vorbestellen</a><a href="#" style="margin-left:2em;" onclick="modifybasket('removeall','','sb'); return false;"><img src="img/deletebasket.png" style="margin-top:10px;" /> Alle Medien von der Merkliste entfernen</a></div></div>
+			<div id="content">
+
+		<div id="details_sb">
+		<h1>Onlinereservierung</h1>
+		<p><strong>Bitte geben Sie Ihre Daten bekannt! </strong><span class="required">mit * gekennzeichnete Felder sind Pflichtfelder.</span></p>
+		
+			<form method="post"action="/index.php?orderbasket=true&amp;location=sb">
+			<fieldset>
+				<input type="hidden" name="location" value="sb"/><input type="hidden" name="order" value="4a30c31d98ab084e42399051e1464b05"/>
+				<div class="clearboth"><label for="firstname">Vorname: <span class="required">*</span></label><input class="bforder" id ="firstname" type="text" name="firstname" maxlength="40" size="40" value="" /></div>
+				<div class="clearboth"><label for="lastname">Nachname: <span class="required">*</span></label><input class="bforder" id ="lastname" type="text" name="lastname" maxlength="40" size="40" value="" /></div>
+				<div class="clearboth"><label for="email">E-Mail: <span class="required">*</span></label><input class="bforder" id ="email" type="text" name="email" maxlength="40" size="40" value=""/></div>
+				<div class="clearboth"><label for="phone">Telefon: </label><input class="bforder" id ="phone" type="text" name="phone" maxlength="40" size="40" value=""/></div>
+				<div class="clearboth"><input type="checkbox" id="agb" name="agb" value="ja" style="margin-top:0.6em; float:left;" /><label for="agb" style="float:right; width: 34em;"><span class="required">*</span> Ich stimme bis auf Widerruf der Verwendung meiner bekannt gegebenen Daten zum Zweck der Zusendung von Informationen über Angebote des Vereins wienXtra zu.</label></div>
+			</fieldset>
+			<h3>Ich möchte hiermit folgende Medien zur Abholung reservieren:</h3>
+			<div class="basketlist">
+			<div class="lbasket"><img src="img/dice.png" alt="Spiel"/> (Spiel)</div><div class="mbasket">CATAN Connect</div><div class="rbasket">spielebox</div><div class="obasket"><img src="img/ok.png" alt="ok" /></div><div class="clearboth"></div><div class="bspacer"></div><div style="text-align:right;"><img src="img/ok.png" alt="ok" /> Kann vorbestellt werden&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<img src="img/notok.png" alt="ok" /> Kann nicht vorbestellt werden</div>
+			<p><input type="submit" value="Vorbestellung absenden"/></p>
+			</div>
+
+			</form>
+
+		</div>
+
+				</div></div><div id="sb_footer"><a target="_blank" href="http://www.wienxtra.at">&copy;2011-2026 wienXtra PHP Factory</a></div></body></html>
+		
