@@ -24,7 +24,7 @@ against the live site unless marked otherwise.
 | Detail | `media=<md5>&location=sb` | **Session-bound**: only resolves if the id is in the current session's last result set, else `id="errorbox"`. |
 | Expand facet lists | `moreyears=true`, `morecws=true`, `moreauthors=true`, `moreagefrom=true` | Shows all values of a facet. |
 | Imprint | `imprint=true` | |
-| Merkliste / pre-order | `basket=add\|remove\|removeall&media=<md5>`, `basketinfo`, `showbasket`, `orderbasket`, `deletebasket` | Session-based "basket" → online pre-order form. **Not probed** (would touch the real order flow). |
+| Merkliste / pre-order | `basket=add\|remove&media=<md5>`, `basketinfo`, `showbasket`, `orderbasket`, `deletebasket` | Session-based basket → online pre-order form. See [Merkliste & pre-order](#merkliste--pre-order). |
 
 Session cookie: `wienXtraopac` (PHP session, `Max-Age=1440` = 24 min idle). Language cookie `lang=de`.
 
@@ -65,6 +65,54 @@ SpielerInnen (1, 2, 3, 4, 5, viele), Schlagworte (incl. useful ones like `ausgez
 `Kooperationsspiele`, `Erweiterung zum Basisspiel`).
 
 **Status icons:** `status_green` entlehnbar, `status_blue` vor Ort nutzbar, `status_red` entliehen, `status_unknown`.
+
+## Merkliste & pre-order
+
+Verified via curl and a browser session with network capture (2026-10-10). **The order form was never submitted** —
+submission creates a binding pre-order.
+
+- Browser traffic: no hidden APIs. Only jQuery, `functions.js` and Google Analytics. The add/remove buttons fire
+  `GET index.php?basket=add|remove&media=<md5>&location=sb`, followed by `GET index.php?basketinfo=<random>` to refresh the header
+  (their JS appends `&location` outside the `.load()` URL, so it's never sent).
+- The Merkliste lives in the PHP session only (no account). It **accumulates across searches**.
+- `basket=add` only works if the id is in the session's **current search result set** (same binding as detail pages).
+  A blind add in a fresh session is silently ignored.
+- **No server-side dedupe:** adding the same id twice counts it twice ⇒ the client must dedupe.
+- `basketinfo` → small HTML snippet ("N Medien auf der Merkliste" + links), empty string when the basket is empty.
+- `showbasket=true` → the basket rendered as a normal result list (with facets). Does **not** seed the detail result set.
+- `deletebasket=<any>` clears the basket.
+- `orderbasket=true` (GET) → form "Onlinereservierung":
+  - `POST /index.php?orderbasket=true&location=sb`
+  - fields: `location=sb`, `order=<32 hex>` (hidden token, **changes on every render** ⇒ GET the form right before POSTing),
+    `firstname`*, `lastname`*, `email`*, `phone`, `agb=ja`* — all `maxlength=40`; no client-side validation.
+  - The `agb` checkbox is **required to order**. It is worded as consent to data use: "Ich stimme bis auf Widerruf der Verwendung
+    meiner bekannt gegebenen Daten zum Zweck der Zusendung von Informationen über Angebote des Vereins wienXtra zu."
+    Its practical purpose is to allow wienXtra to send the order confirmation. The client sets it as part of an order and shows
+    the verbatim text in the consent step.
+  - Lists each basket item with `ok.png` "Kann vorbestellt werden" / `notok.png` "Kann nicht vorbestellt werden".
+- Empty basket + `orderbasket` → "Es befinden sich keine Medien auf der Merkliste, daher kann kein Bestellvorgang eingeleitet werden!"
+
+### What a submitted order does (from a real order, 2026-10-09)
+
+The OPAC sends **no confirmation to the customer**. It e-mails a request to the staff, and they handle it by hand:
+
+1. On submit, the OPAC host (`(internal mail host)`) sends a mail "Reservierungsanfrage über wienXtra webOPAC"
+   **to `spielebox@wienxtra.at`, with the customer's address as `From`**. It contains:
+   - timestamp
+   - customer data: Vorname, Nachname, E-Mail, Telefon, "Datenschutzbestimmungen akzeptiert: ja". This is the `agb` checkbox,
+     which internal systems treat as privacy-terms acceptance.
+   - per title: Titel, **Signatur** (shelf mark, e.g. `SP/SCH`), **TitelNr** (e.g. `59721`, and `md5("59721")` is the media id),
+     and per copy: **MedienNr**, **NSO** (e.g. `M2/6`), status (`verfügbar`, or `verf./onl.res.` for the copy the order reserved).
+2. The staff reply to the customer when the games are ready ("deine Spiele sind bereit … innerhalb von zwei Werktagen abholen"),
+   listing the titles. In our case the reply came the next morning, before opening.
+
+Consequences for the client:
+- An order is a **request**, not a booking. Success can only mean "the form was accepted", and the real confirmation is a human e-mail.
+- Signatur, NSO and per-copy reservation status are internal data. They never appear in the public OPAC HTML.
+
+**Still unknown:** the page shown after POST (success or validation error), and whether items that can't be pre-ordered block the order.
+
+Site rules (home page): order at least one day before pickup; pick up within 3 working days.
 
 ## Etiquette
 
