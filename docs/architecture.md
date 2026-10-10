@@ -1,6 +1,6 @@
 # Architecture (proposal)
 
-Status: **proposal; workspace scaffolded** (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
+Status: **v0.1 (read-only) implemented**; reservation list and reservation request are proposals (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
 [research/](research/): a [survey of existing library MCP servers](research/mcp-server-survey.md),
 [best practices](research/best-practices.md) and the [client stack](research/client-stack.md).
 Open decisions are marked **[decide]** (none at the moment).
@@ -33,7 +33,7 @@ Both are `private` for now, and publishing to npm is undecided.
 |---|---|---|
 | HTTP | native `fetch`, injectable | 14 of 17 TS servers in the survey use it. Injecting it gives free test seams. |
 | Cookies | small cookie handling for `wienXtraopac` | One cookie, always set on a `200` (verified), so `fetch-cookie` + `tough-cookie` would be overkill. It sits in the transport layer and can be swapped out. |
-| Throttling | `p-queue` (concurrency 1, ≥ 1 s spacing) | Politeness. All session traffic is serial anyway (see Session). |
+| Throttling | `p-queue` (concurrency 1, ≥ 500 ms spacing) | Politeness. All session traffic is serial anyway (see Session). |
 | Parsing | `cheerio` (parse5 mode) | The de-facto TS choice and tolerant of sloppy markup. `node-html-parser` failed on broken tables in testing. |
 | Schemas | `zod` v4, exported by the client | The single source of truth. The MCP SDK v2 takes them directly as input/output schemas. |
 | MCP | `@modelcontextprotocol/server` 2.x (spec 2026-07-28), pinned to the major | Stable v2. Supports `inputRequired` elicitation and signed `requestState`. |
@@ -59,30 +59,40 @@ packages/mcp
 
 Parsers never fetch, and the transport never parses. When a schema check fails, the client throws `MarkupChangedError`. That error is the alarm for when the site's markup changes.
 
-## Client surface (v1: read-only)
+## Client surface (v0.1, implemented)
 
-- `search({ term, filters?, sort?, location? }) → { games[], total, facets }`
-  - Uses `printlist=true`, so a single request returns all hits. This works as long as the site's limit of 1400 hits isn't hit.
-  - Filters are given **by label** (`players: 4`, `maxDuration: 90`, `keywords: ["Kooperationsspiele"]`). Age, duration and year
-    ids are computed (`md5(value)`). Player, keyword and media-type ids are looked up from the facet links of a search response,
-    because they change on every catalog import.
-- `getGames(ids) → Game[]` with full details and the status of each copy. Resolution order, which handles detail pages being
-  bound to a session:
-  1. the id is in the session's current result set → fetch the details directly;
-  2. the id is in the **locator index** (a bounded LRU: id → the search term and title that found it) → re-run the search and fetch;
-     ids are grouped so each search runs only once;
-  3. otherwise → `UnknownGameError("search first")`. A bare id carries no title, so the client can't guess one.
-- `listFacets(term)` → the values and counts available for a term.
-- `newAcquisitions({ filters? })`.
+`SpieleboxClient` (all methods async, all inputs validated with the exported zod schemas):
 
-Ids: `id` is the 32-hex media id. `titleNo` (an integer, with `md5(titleNo) == id`) is kept as the readable, stable id.
+- `search({ term, keyword?, players?, age?, maxDuration?, availableOnly?, sort?, limit = 20, offset = 0 }) → { total, offset, games, asOf }`
+  - **Without range filters:** fetches only the result pages (20 hits each) covering the window. If that would take more than two pages,
+    it uses `printlist=true` (all hits in one request) instead. `total` comes from the media-type facet counts.
+  - **Range filters** (`players`, `age` = "suitable for this age", `maxDuration`, `availableOnly`) run **client-side** on the full list
+    (`printlist`). The site's own facets can't do this: they match exact values only ("ab 10 Jahren" ≠ suitable for a 10-year-old) and
+    take one value per kind.
+  - `keyword` uses the site facet (`cwid`), since keywords are truncated in lists. The id is resolved **by label** from the term's
+    expanded keyword list (`morecws=true`) and cached for a day. If a cached id returns 0 hits, the cache is cleared and the
+    search retried once, because the ids change on catalog imports. A keyword the term doesn't have → empty result, without
+    another request.
+- `getGames({ ids }) → { games, notFound }` with full details and the status of each copy. Resolution order, which handles detail
+  pages being bound to the session:
+  1. the id is in the session's current result set → fetch the details directly (the session holds the *full* result set, so this
+     covers hits beyond the fetched page);
+  2. the id is in the **locator index** (bounded LRU, 2000 entries: id → the term or the "new games" list that found it) → replay
+     that search and fetch. Ids are grouped so each search runs once. This also handles server-side session expiry;
+  3. otherwise → `notFound: "search for the game first"`. A bare id carries no title, so the client can't guess one.
+- `getFilters(term) → { total, keywords, players, ageFrom, duration, years }`: all facet values with counts (`morecws` + `moreyears`).
+- `newGames({ limit, offset })`: the catalog's "neue Medien" list.
+
+Ids: `id` is the 32-hex media id, `md5(titleNo)`. The HTML never shows `titleNo`, so it isn't part of the model. `toMediaId(titleNo)`
+converts numbers from staff e-mails.
 
 ## Session
 
-- One OPAC session at a time, behind a mutex. "Last result set" is state for the whole session, so concurrent searches would
-  break each other's detail calls.
-- A new session is started after about 20 minutes idle (the site expires sessions after 24). If the error box appears, the client starts a
-  new session, replays the search and retries once.
+- One OPAC session at a time. All catalog access goes through one mutex, because every search replaces the session's result set;
+  requests are additionally spaced (default 500 ms).
+- The session is dropped after 20 minutes idle (the site expires it after 24). The transport counts session changes (`generation`), so
+  the client knows when its view of the result set is stale. A detail request that hits the error box is retried once after
+  replaying the search.
 
 ## Caching
 
@@ -90,11 +100,10 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 
 | Data | TTL | Notes |
 |---|---|---|
-| Game metadata (title, description, players, …) | until the next nightly import (≈ 03:00 Europe/Vienna), LRU ≈ 2k | Rarely changes. |
-| Availability (status of each copy) | ≤ 120 s, never served stale | Always returned with `asOf`. Re-fetched before any reservation request. |
-| Search results | 60–120 s | |
-| Facet label → id maps | until the next nightly import | Throw away the whole map on any mismatch. |
-| Locator index | LRU ≈ 2k, no TTL | Just term + title, so it's tiny. |
+| Details incl. availability | 2 min, LRU 500 | Always returned with `asOf`. A reservation request will re-fetch regardless. |
+| Search results | 1 min, LRU 100 | Keyed by the full parameter set. |
+| Keyword label → id | 1 day, LRU 5000 | Cleared on mismatch (see search). |
+| Locator index | LRU 2000, no TTL | Just a term per id, so it's tiny. |
 
 ## MCP tools
 
@@ -107,8 +116,10 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | 2 | not readOnly, not destructive, idempotent |
 | `submit_reservation_request` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true` |
 
-Tools return structured content plus a short text summary. They have a concise/detailed option and errors that tell the model what to do next.
-Tool descriptions stay under 2,048 characters, which is where Claude Code truncates them.
+Each tool takes the client's schema as `inputSchema` and `outputSchema` and relays to one client method. Results come back as
+`structuredContent` plus the same JSON as text. Client errors (`SpieleboxError`, e.g. `TOO_MANY_RESULTS`) become `isError` results with
+the error code, so the model can react. Server instructions explain the search semantics. Tool descriptions stay under 2,048 characters,
+which is where Claude Code truncates them.
 
 ## Reservation list (phase 2)
 
@@ -147,7 +158,7 @@ Contact data (`SPIELEBOX_FIRSTNAME`, `…_LASTNAME`, `…_EMAIL`, `…_PHONE`) l
 ## Politeness
 
 - A descriptive User-Agent with a contact URL.
-- One request in flight, at least 1 s apart.
+- One request in flight, at least 500 ms apart (configurable).
 - GET retries at most twice with jittered backoff, respecting `Retry-After`. POST is never retried.
 - A circuit breaker after repeated failures.
 - No crawling features: nothing that walks the whole catalog.
