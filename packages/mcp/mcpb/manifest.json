@@ -16,6 +16,10 @@
   "homepage": "https://github.com/janpaepke/spielebox-mcp",
   "keywords": ["board games", "library", "vienna", "wienxtra", "spielebox"],
   "license": "MIT",
+  "localization": {
+    "resources": "mcpb-resources/${locale}.json",
+    "default_locale": "en-US"
+  },
   "server": {
     "type": "node",
     "entry_point": "server/index.mjs",
@@ -73,32 +77,32 @@
   "user_config": {
     "first_name": {
       "type": "string",
-      "title": "First name",
-      "description": "Prefills the confirmation of reservation requests (optional)",
+      "title": "Vorname",
+      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
       "required": false
     },
     "last_name": {
       "type": "string",
-      "title": "Last name",
-      "description": "Prefills the confirmation of reservation requests (optional)",
+      "title": "Nachname",
+      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
       "required": false
     },
     "email": {
       "type": "string",
-      "title": "E-mail",
-      "description": "The Spielebox confirms reservations by e-mail; prefills the confirmation (optional)",
+      "title": "E-Mail",
+      "description": "Optional – die Spielebox bestätigt Reservierungen per E-Mail",
       "required": false
     },
     "phone": {
       "type": "string",
-      "title": "Phone",
-      "description": "Prefills the confirmation of reservation requests (optional)",
+      "title": "Telefon",
+      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
       "required": false
     },
     "check_updates": {
       "type": "boolean",
-      "title": "Check for updates",
-      "description": "Ask GitHub once per app start whether a newer version exists, and tell you in the chat",
+      "title": "Nach Updates suchen",
+      "description": "Einmal pro App-Start bei GitHub nachsehen, ob es eine neue Version gibt, und im Chat Bescheid geben",
       "required": false,
       "default": true
     }

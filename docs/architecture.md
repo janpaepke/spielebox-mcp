@@ -222,7 +222,7 @@ A script refreshes the fixtures from the live site and trims them.
 - **Updates:** manually installed `.mcpb` files don't update themselves (directory extensions would, but the directory no longer
   takes `.mcpb` submissions). The MCP layer (`updates.ts`, distribution concern, not in the client) asks GitHub for the latest
   release once per process, lazily at the first tool call, and appends a one-time note to a tool result; the server instructions
-  ask the model to pass it on. Off via `SPIELEBOX_CHECK_UPDATES=false` (`user_config.check_updates` in the extension).
+  ask the model to pass it on. Off via `SPIELEBOX_CHECK_UPDATES=false` (`user_config.check_updates`, "Nach Updates suchen", in the extension).
 - Known Claude Desktop issue: `.mcpb` files show a blank icon in Finder because Desktop registers the type with a `dxt.icns` it
   doesn't ship ([mcpb#302](https://github.com/modelcontextprotocol/mcpb/issues/302)). Not fixable from the bundle side.
 

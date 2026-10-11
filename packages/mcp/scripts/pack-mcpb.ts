@@ -1,9 +1,9 @@
 /**
  * Packs the Claude Desktop extension: manifest (with the package version), the self-contained server bundle from
- * `pnpm build`, this project's LICENSE and the licenses of all bundled dependencies → `dist/spielebox.mcpb`.
+ * `pnpm build`, translations, this project's LICENSE and the licenses of all bundled dependencies → `dist/spielebox.mcpb`.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = new URL("../", import.meta.url);
@@ -13,6 +13,16 @@ const manifest = JSON.parse(readFileSync(new URL("mcpb/manifest.json", root), "u
 
 writeFileSync(new URL("manifest.json", bundle), `${JSON.stringify({ ...manifest, version: pkg.version }, null, 2)}\n`);
 copyFileSync(new URL("../../LICENSE", root), new URL("LICENSE", bundle));
+
+// Translations: one file per language in the repo, written for each regional variant a client might ask for.
+const LOCALE_VARIANTS: Record<string, string[]> = { de: ["de", "de-AT", "de-DE", "de-CH"] };
+const resources = new URL("mcpb-resources/", bundle);
+mkdirSync(resources, { recursive: true });
+for (const [language, variants] of Object.entries(LOCALE_VARIANTS)) {
+  for (const variant of variants) {
+    copyFileSync(new URL(`mcpb/locales/${language}.json`, root), new URL(`${variant}.json`, resources));
+  }
+}
 writeFileSync(new URL("THIRD_PARTY_LICENSES.txt", bundle), thirdPartyLicenses());
 
 const mcpb = (...args: string[]) => execFileSync("pnpm", ["exec", "mcpb", ...args], { cwd: root, stdio: "inherit" });

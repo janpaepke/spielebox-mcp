@@ -101,7 +101,7 @@ sent directly to WIENXTRA only when you confirm a reservation request; WIENXTRA'
 applies to that data. The developer receives no data. Search queries and results, and contact details entered in your AI
 assistant's confirmation form, pass through your AI assistant and are subject to its provider's terms. To tell you about new
 versions, the software asks GitHub once per start (at the first use) for the latest release; GitHub sees your IP address, nothing
-else is sent. You can turn this off in the extension's settings ("Check for updates").
+else is sent. You can turn this off in the extension's settings („Nach Updates suchen“).
 
 <details lang="de">
 <summary>Deutsch</summary>
@@ -125,7 +125,7 @@ gespeichert und nur bei einer von Ihnen bestätigten Reservierungsanfrage direkt
 Ergebnisse sowie Kontaktdaten, die Sie im Bestätigungsformular Ihres KI-Assistenten eingeben, laufen über Ihren KI-Assistenten und
 unterliegen den Bedingungen von dessen Anbieter. Um Sie über neue Versionen zu informieren, fragt das Programm einmal pro Start (bei
 der ersten Verwendung) bei GitHub nach der neuesten Version; GitHub sieht dabei Ihre IP-Adresse, sonst wird nichts übermittelt.
-Sie können das in den Einstellungen der Erweiterung abschalten („Check for updates“).
+Sie können das in den Einstellungen der Erweiterung abschalten („Nach Updates suchen“).
 
 </details>
 
