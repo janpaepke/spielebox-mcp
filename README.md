@@ -131,7 +131,7 @@ Sie können das in den Einstellungen der Erweiterung abschalten („Check for up
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Design and background: [docs/architecture.md](docs/architecture.md) and
+What's planned: [ROADMAP.md](ROADMAP.md). How to help: [CONTRIBUTING.md](CONTRIBUTING.md). Design and background: [docs/architecture.md](docs/architecture.md) and
 [docs/opac-research.md](docs/opac-research.md).
 
 ## License
