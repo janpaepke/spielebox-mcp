@@ -21,7 +21,7 @@ pnpm format      # Biome, writes fixes
 | Path | What |
 |---|---|
 | `packages/client` | `@janpaepke/spielebox-client`: transport (session, throttling, retries), pure HTML parsers, zod schemas, the `SpieleboxClient` facade. No MCP dependency. |
-| `packages/mcp` | `spielebox-mcp`: MCP tools that relay to the client, and the consent layer (`src/consent`) for reservation requests. |
+| `packages/mcp` | `spielebox-mcp`: MCP tools that relay to the client, the consent layer (`src/consent`) for reservation requests, the browser handoff (`src/handoff`) and the update notice. |
 | `packages/mcp/mcpb` | Manifest of the Claude Desktop extension. |
 | `docs/` | How the catalog works ([opac-research.md](docs/opac-research.md)) and the design ([architecture.md](docs/architecture.md)). |
 
@@ -59,6 +59,19 @@ pnpm --filter spielebox-mcp pack:mcpb   # → packages/mcp/dist/spielebox.mcpb
 ```
 
 This bundles the server into one file (no `node_modules`), writes the manifest with the package version, validates and packs it.
+
+## Releases
+
+CI (`.github/workflows/ci.yml`) runs build, lint, typecheck and tests on every pull request and push to `main`. To release:
+
+```sh
+pnpm release 1.2.3 --dry-run   # checks + what it would do
+pnpm release 1.2.3             # bumps both packages, commits, tags v1.2.3, pushes
+```
+
+The tag triggers `release.yml`, which runs the checks again, builds `spielebox.mcpb` with a checksum and build provenance, and
+publishes a GitHub release with notes from the `feat`/`fix` commits since the previous tag. Installed extensions mention the
+new version once in the chat.
 
 ## Commits
 

@@ -46,18 +46,20 @@ Python alternative: httpx + selectolax + pydantic + `mcp>=2,<3`. It works equall
 ## Layers
 
 ```
-packages/client
-  transport/   fetch + cookie + queue + UA + GET retry (never POST)
-  session/     one OPAC session behind a mutex, idle renewal, error-box → renew + replay once
-  parse/       pure functions html → raw records (tested against saved HTML fixtures)
-  schema/      zod domain model: Game, Copy, SearchParams, SearchResult, Facet…
-  client.ts    facade: SpieleboxClient
-  cli.ts       (later) a CLI on top of the facade
-packages/mcp
-  server.ts    registerTool(name, { inputSchema, outputSchema, annotations }, args => client.x(args))
-  consent/     gate (signed round trip, single use, channel choice) + channels: form, url (local page) …
-  index.ts     wires one client and one consent gate for the process, serves stdio
-  mcpb/        Claude Desktop extension manifest (packaging only, no code)
+packages/client/src
+  transport.ts  fetch + cookie + queue + UA + GET retry (never POST), idle session renewal
+  mutex.ts      one OPAC session at a time: serializes all catalog access
+  parse/        pure functions html → raw records (tested against saved HTML fixtures)
+  schema.ts     zod domain model: Game, Copy, SearchParams, SearchResult, Facet, HandoffPlan…
+  client.ts     facade: SpieleboxClient; locator index, caches, error box → replay the search once
+packages/mcp/src
+  server.ts     registerTool(name, { inputSchema, outputSchema, annotations }, args => client.x(args))
+  consent/      gate (signed round trip, single use, channel choice) + channels: form, url (local page)
+  handoff/      local handoff page + opening the default browser
+  web/          the small local HTTP server shared by consent and handoff pages (127.0.0.1, CSP, Host checks)
+  updates.ts    update notice (GitHub releases)
+  index.ts      wires one client, consent gate, handoff and update check for the process, serves stdio
+packages/mcp/mcpb  Claude Desktop extension manifest + locales (packaging only, no code)
 ```
 
 Parsers never fetch, and the transport never parses. When a schema check fails, the client throws `MarkupChangedError`. That error is the alarm for when the site's markup changes.
@@ -99,7 +101,7 @@ converts numbers from staff e-mails.
 
 ## Caching
 
-In memory only, bounded, no persistent cache. HTTP caching is useless here because every response is `no-cache`.
+In memory only, bounded, no persistent cache. HTTP caching is useless here because nearly every response is `no-cache`.
 
 | Data | TTL | Notes |
 |---|---|---|
@@ -229,8 +231,7 @@ their own, because detail pages are bound to the session's last search.
 
 - A descriptive User-Agent with a contact URL.
 - One request in flight, at least 500 ms apart (configurable).
-- GET retries at most twice with jittered backoff, respecting `Retry-After`. POST is never retried.
-- A circuit breaker after repeated failures.
+- GET retries at most twice with jittered backoff, respecting `Retry-After` (capped at 10 s). POST is never retried.
 - No crawling features: nothing that walks the whole catalog.
 
 ## Testing
@@ -238,7 +239,7 @@ their own, because detail pages are bound to the session's last search.
 1. **Parser tests** against saved HTML fixtures: golden snapshots plus checks that survive a fixture refresh.
 2. **Client tests** with an injected `fetch`: sessions, error-box recovery, locator resolution.
 3. **MCP tests** over the in-memory transport, including the consent flow (decline, tampered state, replayed nonce).
-4. A **live canary** behind an env flag: runs a few real searches and saves fresh fixtures on failure.
+4. A **live canary** behind an env flag (`test:live`, weekly in CI): runs a few real searches, read-only.
 
 A script refreshes the fixtures from the live site and trims them.
 

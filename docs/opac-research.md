@@ -29,7 +29,7 @@ against the live site unless marked otherwise.
 Session cookie: `wienXtraopac` (PHP session, `Max-Age=1440` = 24 min idle). It is set on the first `200` response (no redirect), and the
 session id never appears in URLs. Language cookie `lang=de`.
 
-Responses are `text/html; charset=utf-8` and `Cache-Control: no-cache, must-revalidate` (HTTP caching is useless). Query parameters must be
+Responses are `text/html; charset=utf-8` and `Cache-Control: no-cache, must-revalidate` (HTTP caching is useless; exception: `deletebasket`, see below). Query parameters must be
 **UTF-8** percent-encoded: `Fl%C3%BCgelschlag` finds FLÜGELSCHLAG, while Latin-1 `Fl%FCgelschlag` returns an empty page. A search with a single
 hit renders the normal list (no redirect to the detail page).
 
@@ -97,7 +97,7 @@ submission creates a binding pre-order.
   search runs finishes only after it. Requests the client cancels still take effect.
 - `basketinfo` → small HTML snippet ("N Medien auf der Merkliste" + links), empty string when the basket is empty.
 - `showbasket=true` → the basket rendered as a normal result list (with facets). Does **not** seed the detail result set.
-- `deletebasket=<any>` clears the basket.
+- `deletebasket=<number>` clears the basket (see the numeric-value and caching notes above).
 - `orderbasket=true` (GET) → form "Onlinereservierung":
   - `POST /index.php?orderbasket=true&location=sb`
   - fields: `location=sb`, `order=<32 hex>` (hidden token, **changes on every render** ⇒ GET the form right before POSTing),
