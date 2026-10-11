@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { TermTooShortError, TooManyResultsError } from "../src/errors.ts";
+import { OpacMessageError, TermTooShortError, TooManyResultsError } from "../src/errors.ts";
 import { parseDetailPage } from "../src/parse/detail.ts";
+import { parseOrderForm, parseOrderResponse } from "../src/parse/order.ts";
 import { checkSearchMessage, loadPage } from "../src/parse/page.ts";
 import { parseResultPage, totalFromFacets } from "../src/parse/search.ts";
 
@@ -118,5 +119,23 @@ describe("parseDetailPage", () => {
 
   it("returns null for the session error box", () => {
     expect(parseDetailPage(fixture("detail-not-in-session.html"), "3375ddafbc45fed35c0da0b4cc481084", NOW)).toBeNull();
+  });
+});
+
+describe("order form", () => {
+  it("reads the token and the items with their orderability", () => {
+    expect(parseOrderForm(fixture("order-form.html"))).toEqual({
+      token: "4a30c31d98ab084e42399051e1464b05",
+      items: [{ title: "CATAN Connect", orderable: true }],
+    });
+  });
+
+  it("throws the catalog's message for an empty Merkliste", () => {
+    expect(() => parseOrderForm(fixture("order-form-empty.html"))).toThrow(OpacMessageError);
+  });
+
+  it("classifies an error box and the form shown again as rejected", () => {
+    expect(parseOrderResponse(fixture("order-form-empty.html")).accepted).toBe(false);
+    expect(parseOrderResponse(fixture("order-form.html")).accepted).toBe(false);
   });
 });

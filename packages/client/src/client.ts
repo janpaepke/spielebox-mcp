@@ -4,9 +4,12 @@ import { MarkupChangedError, SpieleboxError } from "./errors.ts";
 import { Mutex } from "./mutex.ts";
 import { PAGE_SIZE, SORT_IDS } from "./opac.ts";
 import { parseDetailPage } from "./parse/detail.ts";
+import { parseOrderForm, parseOrderResponse } from "./parse/order.ts";
 import { checkSearchMessage, loadPage } from "./parse/page.ts";
 import { type FacetGroups, type FacetLink, parseResultPage, totalFromFacets } from "./parse/search.ts";
 import {
+  type Contact,
+  Contact as ContactSchema,
   type FacetValue,
   type Filters,
   type GameDetails,
@@ -19,6 +22,7 @@ import {
   type ReservationList,
   type ReservationListChange,
   ReservationListChange as ReservationListChangeSchema,
+  type ReservationRequestResult,
   type SearchParams,
   SearchParams as SearchParamsSchema,
   type SearchResult,
@@ -39,6 +43,13 @@ type Query = Record<string, string>;
 
 const DAY_MS = 24 * 60 * 60_000;
 
+/**
+ * Identifies a result set on the OPAC: which games a search puts into the session. Sorting and paging don't change it,
+ * a keyword facet narrows it.
+ */
+const resultSetKey = (locator: Locator, keywordId = "") =>
+  locator.kind === "new" ? "new" : `search:${locator.term}|${keywordId}`;
+
 /** Upper bound for the reservation list; only there to keep memory bounded. */
 export const RESERVATION_LIST_MAX = 30;
 
@@ -58,7 +69,7 @@ export class SpieleboxClient {
   #session = { generation: -1, key: "", ids: new Set<string>() };
 
   readonly #locators = new LRUCache<string, Locator>({ max: 2000 });
-  /** Reservation list: ids in insertion order. Their locators are pinned (see #pin) so they stay resolvable. */
+  /** Reservation list: ids in insertion order. Their locators are pinned here so LRU eviction can't drop them. */
   readonly #reservationList = new Set<string>();
   readonly #pinnedLocators = new Map<string, Locator>();
   readonly #details: LRUCache<string, GameDetails>;
@@ -104,7 +115,12 @@ export class SpieleboxClient {
     const { term: t } = SearchParamsSchema.pick({ term: true }).parse({ term });
     return this.#lock.run(async () => {
       const query = { newsearch: "true", sword: t, morecws: "true", moreyears: "true" };
-      const page = await this.#fetchResults(query, `search:${t}`, { kind: "search", term: t }, t);
+      const page = await this.#fetchResults(
+        query,
+        resultSetKey({ kind: "search", term: t }),
+        { kind: "search", term: t },
+        t,
+      );
       if (!page) return { term: t, total: 0, keywords: [], players: [], ageFrom: [], duration: [], years: [] };
       this.#learnKeywords(page.facets.Schlagworte);
       const values = (links: FacetLink[] = []): FacetValue[] => links.map(({ label, count }) => ({ label, count }));
@@ -124,7 +140,14 @@ export class SpieleboxClient {
   async newGames(params: NewGamesParams = {}): Promise<SearchResult> {
     const { limit, offset } = NewGamesParamsSchema.parse(params);
     return this.#lock.run(() =>
-      this.#pagedResults({ newmedia: "true", newsearch: "true" }, "new", { kind: "new" }, "neue Medien", limit, offset),
+      this.#pagedResults(
+        { newmedia: "true", newsearch: "true" },
+        resultSetKey({ kind: "new" }),
+        { kind: "new" },
+        "neue Medien",
+        limit,
+        offset,
+      ),
     );
   }
 
@@ -178,6 +201,97 @@ export class SpieleboxClient {
     });
   }
 
+  /** The reservation list with availability fetched fresh from the catalog (no cache), as the basis for a request. */
+  async prepareReservationRequest(): Promise<ReservationList> {
+    return this.#lock.run(() => {
+      this.#http.dropIdleSession();
+      for (const id of this.#reservationList) this.#details.delete(id);
+      return this.#describeReservationList([]);
+    });
+  }
+
+  /**
+   * Sends the reservation list to the catalog as a reservation request. **Binding for the user**: the catalog e-mails
+   * the request to the staff, who prepare the games and confirm by e-mail. Callers must obtain the user's explicit
+   * consent first, and pass the ids the user confirmed: the request is only sent if they are exactly the reservation
+   * list at that moment. Never retried; on success the reservation list is cleared.
+   *
+   * Steps: re-check availability → fresh session → put each game on the site's Merkliste (which only accepts ids from
+   * the session's current result set) → load the order form and check it lists exactly these games, all orderable →
+   * submit the form with the freshly rendered token.
+   */
+  async submitReservationRequest(params: { contact: Contact; ids: string[] }): Promise<ReservationRequestResult> {
+    const contact = ContactSchema.parse(params.contact);
+    return this.#lock.run(async () => {
+      const ids = [...this.#reservationList];
+      if (!ids.length) throw new SpieleboxError("RESERVATION_LIST_EMPTY", "The reservation list is empty");
+      if ([...ids].sort().join() !== [...params.ids].sort().join()) {
+        throw new SpieleboxError("RESERVATION_LIST_CHANGED", "The reservation list differs from the confirmed games");
+      }
+      for (const id of ids) this.#details.delete(id);
+      const { games, notFound } = await this.#getGames(ids);
+      if (notFound.length) {
+        throw new SpieleboxError("NOT_FOUND", `Games not found anymore: ${notFound.map((n) => n.id).join(", ")}`);
+      }
+      const unavailable = games.filter((g) => g.availability !== "available").map((g) => g.title);
+      if (unavailable.length) {
+        throw new SpieleboxError("NOT_AVAILABLE", `Not available right now: ${unavailable.join(", ")}`);
+      }
+
+      this.#http.resetSession();
+      const { groups, unknown } = this.#groupByLocator(ids);
+      if (unknown.length) throw new SpieleboxError("NOT_FOUND", `Unknown games: ${unknown.join(", ")}`);
+      for (const { locator, ids: groupIds } of groups) {
+        await this.#enterLocatorResultSet(locator);
+        for (const id of groupIds) await this.#http.get({ basket: "add", media: id });
+      }
+
+      const form = parseOrderForm(loadPage(await this.#http.get({ orderbasket: "true" })));
+      const expected = games.map((g) => g.title).sort();
+      const listed = form.items.map((i) => i.title).sort();
+      if (JSON.stringify(expected) !== JSON.stringify(listed)) {
+        await this.#http.get({ deletebasket: "1" });
+        throw new SpieleboxError(
+          "ORDER_MISMATCH",
+          `The order form lists [${listed.join(", ")}] instead of [${expected.join(", ")}]; nothing was sent`,
+        );
+      }
+      const blocked = form.items.filter((i) => !i.orderable).map((i) => i.title);
+      if (blocked.length) {
+        await this.#http.get({ deletebasket: "1" });
+        throw new SpieleboxError("NOT_ORDERABLE", `The catalog can't reserve: ${blocked.join(", ")}; nothing was sent`);
+      }
+
+      const response = parseOrderResponse(
+        loadPage(
+          await this.#http.post(
+            { orderbasket: "true" },
+            {
+              location: "sb",
+              order: form.token,
+              firstname: contact.firstName,
+              lastname: contact.lastName,
+              email: contact.email,
+              phone: contact.phone ?? "",
+              agb: "ja",
+            },
+          ),
+        ),
+      );
+      if (!response.accepted)
+        throw new SpieleboxError("ORDER_REJECTED", `The catalog rejected the request: ${response.message}`);
+
+      this.#reservationList.clear();
+      this.#pinnedLocators.clear();
+      return {
+        status: "sent",
+        titles: expected,
+        message: response.message,
+        sentAt: new Date(this.#now()).toISOString(),
+      };
+    });
+  }
+
   async #describeReservationList(notFound: ReservationList["notFound"]): Promise<ReservationList> {
     const ids = [...this.#reservationList];
     const details = ids.length ? await this.#getGames(ids) : { games: [], notFound: [] };
@@ -203,7 +317,7 @@ export class SpieleboxClient {
     }
 
     const locator: Locator = { kind: "search", term: p.term };
-    const key = `search:${p.term}|${query.cwid ?? ""}`;
+    const key = resultSetKey(locator, query.cwid);
     const rangeFilters = p.players ?? p.age ?? p.maxDuration ?? p.availableOnly;
     const result = rangeFilters
       ? await this.#filteredResults(query, key, locator, p)
@@ -290,7 +404,12 @@ export class SpieleboxClient {
     const cached = this.#keywordIds.get(keyword.toLowerCase());
     if (cached) return cached;
     const query = { newsearch: "true", sword: term, morecws: "true" };
-    const page = await this.#fetchResults(query, `search:${term}|`, { kind: "search", term }, term);
+    const page = await this.#fetchResults(
+      query,
+      resultSetKey({ kind: "search", term }),
+      { kind: "search", term },
+      term,
+    );
     this.#learnKeywords(page?.facets.Schlagworte);
     // Not among the term's keywords means no game matches both.
     return this.#keywordIds.get(keyword.toLowerCase()) ?? null;
@@ -320,22 +439,10 @@ export class SpieleboxClient {
     }
 
     // 2) Replay the search that found them, one search per locator.
-    const groups = new Map<string, { locator: Locator; ids: string[] }>();
-    for (const id of [...pending.filter((i) => !inSession.has(i)), ...retry]) {
-      const locator = this.#locators.get(id) ?? this.#pinnedLocators.get(id);
-      if (!locator) {
-        notFound.push({ id, reason: "Unknown id: search for the game first" });
-        continue;
-      }
-      const key = locator.kind === "new" ? "new" : `search:${locator.term}|`;
-      const group = groups.get(key) ?? { locator, ids: [] };
-      group.ids.push(id);
-      groups.set(key, group);
-    }
-    for (const [key, { locator, ids: groupIds }] of groups) {
-      const query: Query =
-        locator.kind === "new" ? { newmedia: "true", newsearch: "true" } : { newsearch: "true", sword: locator.term };
-      await this.#fetchResults(query, key, locator, locator.kind === "new" ? "neue Medien" : locator.term);
+    const { groups, unknown } = this.#groupByLocator([...pending.filter((i) => !inSession.has(i)), ...retry]);
+    for (const id of unknown) notFound.push({ id, reason: "Unknown id: search for the game first" });
+    for (const { locator, ids: groupIds } of groups) {
+      await this.#enterLocatorResultSet(locator);
       for (const id of groupIds) {
         const game = await this.#fetchDetail(id);
         if (game) found.set(id, game);
@@ -345,6 +452,36 @@ export class SpieleboxClient {
 
     const games = ids.flatMap((id) => found.get(id) ?? []);
     return { games, notFound };
+  }
+
+  /** Groups ids by the search that can bring them back into the session's result set. */
+  #groupByLocator(ids: string[]): { groups: { locator: Locator; ids: string[] }[]; unknown: string[] } {
+    const groups = new Map<string, { locator: Locator; ids: string[] }>();
+    const unknown: string[] = [];
+    for (const id of ids) {
+      const locator = this.#pinnedLocators.get(id) ?? this.#locators.get(id);
+      if (!locator) {
+        unknown.push(id);
+        continue;
+      }
+      const key = resultSetKey(locator);
+      const group = groups.get(key) ?? { locator, ids: [] };
+      group.ids.push(id);
+      groups.set(key, group);
+    }
+    return { groups: [...groups.values()], unknown };
+  }
+
+  /** Runs the plain search a locator stands for, making its games the session's result set. */
+  async #enterLocatorResultSet(locator: Locator): Promise<void> {
+    const query: Query =
+      locator.kind === "new" ? { newmedia: "true", newsearch: "true" } : { newsearch: "true", sword: locator.term };
+    await this.#fetchResults(
+      query,
+      resultSetKey(locator),
+      locator,
+      locator.kind === "new" ? "neue Medien" : locator.term,
+    );
   }
 
   async #fetchDetail(id: string): Promise<GameDetails | null> {

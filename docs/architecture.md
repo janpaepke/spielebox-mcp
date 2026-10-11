@@ -1,6 +1,6 @@
 # Architecture (proposal)
 
-Status: **v0.1 (read-only) and v0.2 (reservation list) implemented**; the reservation request is a proposal (2026-10-11). This doc is based on [opac-research.md](opac-research.md) and on the three reports in
+Status: **v0.1–v0.3 implemented** (2026-10-11). The reservation request is tested against a fake catalog only; the first real submission is still pending. This doc is based on [opac-research.md](opac-research.md) and on the three reports in
 [research/](research/): a [survey of existing library MCP servers](research/mcp-server-survey.md),
 [best practices](research/best-practices.md) and the [client stack](research/client-stack.md).
 Open decisions are marked **[decide]** (none at the moment).
@@ -114,7 +114,7 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 | `list_filters` | 1 | readOnly, openWorld |
 | `list_new_games` | 1 | readOnly, openWorld |
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | 2 | not readOnly, not destructive, idempotent |
-| `submit_reservation_request` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true` |
+| `submit_reservation_request` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true`; output `{ sent, reason?, request? }` |
 
 Each tool takes the client's schema as `inputSchema` and `outputSchema` and relays to one client method. Results come back as
 `structuredContent` plus the same JSON as text. Client errors (`SpieleboxError`, e.g. `TOO_MANY_RESULTS`) become `isError` results with
@@ -136,7 +136,7 @@ Adding resolves each id through `getGames`, so only games the client has seen ca
 availability. The locators of listed games are **pinned** outside the LRU, so a long session can't evict them before submission.
 The list holds at most 30 games, only to keep memory bounded; the site's own limit is unknown.
 
-## Reservation request (phase 3)
+## Reservation request (phase 3, implemented, not yet used for real)
 
 The order is a binding request that the staff process by hand by e-mail. A successful submit means "request sent", not "reserved".
 The tool says exactly that.
@@ -147,18 +147,35 @@ Steps in the client (`submitReservationRequest(items, contact)`):
 3. `GET orderbasket`, then check the order-ability marker (ok/notok) for each item and abort if anything is unexpected.
 4. `POST` with the freshly loaded `order` token. **Never retry automatically.**
 
-Consent in the MCP layer, in two independent layers, failing closed:
-1. **Elicitation form** (`inputRequired`): shows the exact list of titles, the pickup rules and the contact details (prefilled from env,
-   editable), plus the verbatim wording of the site's checkbox. The confirm box is required.
-   `requestState` is HMAC-signed `{ digest(items+contact), nonce, exp: 5 min }` and contains no personal data. On retry the
-   client re-derives the digest and requires it to match, and each nonce can be used only once.
-2. **Claude Code always-ask:** `anthropic/requiresUserInteraction` forces a permission prompt on every call, even in auto or bypass mode.
+Implementation notes:
+- Availability is re-fetched without the cache, and the client refuses before touching the Merkliste if any game isn't available.
+- The order form lists titles only (no ids). The client compares them with the expected titles and aborts on any difference
+  (`ORDER_MISMATCH`), so a silently ignored `basket=add` can't produce a partial order. It also aborts if a game is marked
+  "Kann nicht vorbestellt werden" (`NOT_ORDERABLE`). In both cases it clears the site's Merkliste.
+- The POST is never retried. A network error after sending is reported as "outcome unknown".
+- **The success page has never been recorded.** The client counts any response that is neither the error box nor the form again
+  as accepted, and returns the page text verbatim. The test fixture for it is synthetic and marked as such.
 
-If the client doesn't support elicitation, the tool refuses. Later, Claude Desktop could get an MCP Apps UI with a submit tool
-that only the app can call.
+Consent in the MCP layer (`submit_reservation_request`), in two independent layers, failing closed:
+1. **Elicitation form** (MRTR `inputRequired`): the exact list of titles, the pickup note, the order form's checkbox wording
+   verbatim, a required confirm box, and the contact fields, prefilled from `SPIELEBOX_FIRST_NAME`, `SPIELEBOX_LAST_NAME`,
+   `SPIELEBOX_EMAIL` and `SPIELEBOX_PHONE` and editable.
+   - `requestState` is signed by the SDK codec: an HMAC with a 5-minute TTL, bound to the method. It holds the ids shown in the
+     form and a nonce, never personal data. The SDK rejects forged or expired state before the handler runs.
+   - On the second round the server requires the nonce to be unused, `accept`, a ticked confirm box, and valid contact data. It then
+     passes the confirmed ids to the client, which sends **only if they are exactly the reservation list**, checked inside the same
+     lock as the submission, so a concurrent change can't slip in. Decline, cancel or an unticked box → `{ sent: false, reason }`,
+     which is not an error.
+   - The key and the nonce store are **process-wide**: the SDK may build a server instance per request, and the round trip spans two.
+2. **Claude Code always-ask:** `_meta["anthropic/requiresUserInteraction"]: true` forces a permission prompt on every call, even in
+   auto or bypass mode.
 
-Contact data (`SPIELEBOX_FIRSTNAME`, `…_LASTNAME`, `…_EMAIL`, `…_PHONE`) lives in the MCP server's env config. It never goes into
-`requestState`, logs, URLs or tool results.
+A client that doesn't declare elicitation can't use the tool: the SDK rejects the input request (`-32021`). Tests cover acceptance,
+decline, cancel, an unticked box, a list changed mid-flow, invalid contact data, a client without forms, a replayed confirmation
+and a forged state. A live probe ran the flow against the real catalog with a fetch guard that blocks every POST and Merkliste request:
+the form showed the real titles and declining sent nothing.
+
+Later, Claude Desktop could get an MCP Apps UI with a submit tool that only the app can call.
 
 ## Politeness
 

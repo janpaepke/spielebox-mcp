@@ -59,6 +59,36 @@ export class Transport {
     return html;
   }
 
+  /**
+   * POSTs a form to `index.php?<query>`. **Never retried**: a POST may have taken effect even if the response was lost.
+   */
+  async post(query: Record<string, string>, form: Record<string, string>): Promise<string> {
+    const url = `${this.#options.baseUrl}?${new URLSearchParams({ ...query, location: LOCATION })}`;
+    const html = await this.#queue.add(async () => {
+      let response: Response;
+      try {
+        response = await this.#options.fetch(url, {
+          method: "POST",
+          headers: {
+            "user-agent": this.#options.userAgent,
+            "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+            cookie: ["lang=de", this.#cookie].filter(Boolean).join("; "),
+          },
+          body: new URLSearchParams(form).toString(),
+          signal: AbortSignal.timeout(this.#options.timeoutMs),
+        });
+      } catch (error) {
+        throw new HttpError(`POST failed, outcome unknown: ${url}`, undefined, { cause: error });
+      }
+      this.#lastRequestAt = this.#options.now();
+      this.#storeSession(response);
+      if (!response.ok) throw new HttpError(`HTTP ${response.status} for POST ${url}`, response.status);
+      return response.text();
+    });
+    if (html === undefined) throw new HttpError(`Request aborted: ${url}`);
+    return html;
+  }
+
   async #getWithRetry(url: string): Promise<string> {
     this.dropIdleSession();
     for (let attempt = 0; ; attempt++) {

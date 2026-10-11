@@ -148,3 +148,22 @@ export const ReservationListChange = z.object({
   ids: z.array(MediaId).min(1).max(20).describe("Game ids from search results"),
 });
 export type ReservationListChange = z.input<typeof ReservationListChange>;
+
+/** Contact data the catalog's order form asks for. Field limits mirror the form (maxlength 40). */
+export const Contact = z.object({
+  firstName: z.string().trim().min(1).max(40),
+  lastName: z.string().trim().min(1).max(40),
+  email: z.email().max(40),
+  phone: z.string().trim().max(40).optional(),
+});
+export type Contact = z.infer<typeof Contact>;
+
+export const ReservationRequestResult = z.object({
+  status: z
+    .literal("sent")
+    .describe("The catalog accepted the request; staff confirm it by e-mail (not a booking yet)"),
+  titles: z.array(z.string()),
+  message: z.string().describe("Text of the catalog's response page"),
+  sentAt: z.iso.datetime(),
+});
+export type ReservationRequestResult = z.infer<typeof ReservationRequestResult>;

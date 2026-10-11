@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { SpieleboxClient } from "../src/client.ts";
-import { TooManyResultsError } from "../src/errors.ts";
+import { HttpError, TooManyResultsError } from "../src/errors.ts";
 import { FakeOpac } from "./fake-opac.ts";
 
 const CONNECT = "3375ddafbc45fed35c0da0b4cc481084";
@@ -167,6 +167,12 @@ describe("getFilters", () => {
     expect(filters.players.map((p) => p.label)).toContain("für 4 SpielerIn(nen)");
     expect(opac.log).toEqual(["newsearch=true&sword=catan&morecws=true&moreyears=true"]);
   });
+
+  it("lets getGames use the result set getFilters entered", async () => {
+    await client.getFilters("catan");
+    await client.getGames({ ids: [CONNECT] });
+    expect(opac.log.slice(1)).toEqual([`media=${CONNECT}`]);
+  });
 });
 
 describe("newGames", () => {
@@ -221,5 +227,118 @@ describe("reservation list", () => {
     await expect(client.addToReservationList({ ids: ids.slice(20, 31) })).rejects.toMatchObject({
       code: "RESERVATION_LIST_FULL",
     });
+  });
+});
+
+describe("reservation request", () => {
+  const contact = { firstName: "Erika", lastName: "Muster", email: "erika@example.org", phone: "+43 1 234" };
+
+  let listed: string[] = [];
+  async function listOf(ids: string[]) {
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids });
+    listed = ids;
+    opac.requests.length = 0;
+  }
+
+  it("re-checks availability without the cache when preparing", async () => {
+    await listOf([CONNECT]);
+    const list = await client.prepareReservationRequest();
+    expect(list.items).toHaveLength(1);
+    expect(opac.log).toEqual([`media=${CONNECT}`]);
+  });
+
+  it("puts the games on a fresh Merkliste, checks the form and submits it once", async () => {
+    await listOf([CONNECT, MENSCHHEIT]);
+    const result = await client.submitReservationRequest({ contact, ids: listed });
+    expect(result).toMatchObject({ status: "sent", titles: ["ABENTEUER MENSCHHEIT", "CATAN Connect"] });
+    expect(result.message).toContain("Vielen Dank");
+    expect(opac.log.slice(-5)).toEqual([
+      "newsearch=true&sword=catan",
+      `basket=add&media=${CONNECT}`,
+      `basket=add&media=${MENSCHHEIT}`,
+      "orderbasket=true",
+      "orderbasket=true",
+    ]);
+    expect(opac.orders).toHaveLength(1);
+    expect(Object.fromEntries(opac.orders[0] ?? [])).toEqual({
+      location: "sb",
+      order: "token1",
+      firstname: "Erika",
+      lastname: "Muster",
+      email: "erika@example.org",
+      phone: "+43 1 234",
+      agb: "ja",
+    });
+    expect((await client.getReservationList()).items).toEqual([]);
+  });
+
+  it("refuses when a game is no longer available, before touching the Merkliste", async () => {
+    await client.search({ term: "catan" });
+    const borrowed = (await client.search({ term: "catan", limit: 30 })).games.find(
+      (g) => g.id !== CONNECT && g.id !== MENSCHHEIT,
+    );
+    await client.addToReservationList({ ids: [borrowed?.id ?? ""] }); // stand-in detail page: all copies borrowed
+    listed = [borrowed?.id ?? ""];
+    opac.requests.length = 0;
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toMatchObject({
+      code: "NOT_AVAILABLE",
+    });
+    expect(opac.log.some((l) => l.startsWith("basket="))).toBe(false);
+    expect(opac.orders).toEqual([]);
+  });
+
+  it("aborts and clears the Merkliste when the catalog can't reserve a game", async () => {
+    await listOf([CONNECT, MENSCHHEIT]);
+    opac.notOrderable.add(MENSCHHEIT);
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toMatchObject({
+      code: "NOT_ORDERABLE",
+    });
+    expect(opac.log.at(-1)).toBe("deletebasket=1");
+    expect(opac.orders).toEqual([]);
+    expect((await client.getReservationList()).items).toHaveLength(2);
+  });
+
+  it("aborts when the order form doesn't list exactly the expected games", async () => {
+    await listOf([CONNECT, MENSCHHEIT]);
+    opac.ignoreAdds.add(CONNECT);
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toMatchObject({
+      code: "ORDER_MISMATCH",
+    });
+    expect(opac.orders).toEqual([]);
+  });
+
+  it("reports a rejected submission and keeps the list", async () => {
+    await listOf([CONNECT]);
+    opac.orderOutcome = "error";
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toMatchObject({
+      code: "ORDER_REJECTED",
+    });
+    expect((await client.getReservationList()).items).toHaveLength(1);
+  });
+
+  it("refuses when the list differs from the confirmed games", async () => {
+    await listOf([CONNECT, MENSCHHEIT]);
+    await expect(client.submitReservationRequest({ contact, ids: [CONNECT] })).rejects.toMatchObject({
+      code: "RESERVATION_LIST_CHANGED",
+    });
+    expect(opac.log).toEqual([]);
+  });
+
+  it("never retries the submission", async () => {
+    await listOf([CONNECT]);
+    opac.orderOutcome = "network";
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toBeInstanceOf(HttpError);
+    expect(opac.orders).toHaveLength(1);
+  });
+
+  it("validates contact data and refuses an empty list before any request", async () => {
+    await expect(
+      client.submitReservationRequest({ contact: { ...contact, email: "nope" }, ids: [] }),
+    ).rejects.toThrow();
+    await expect(client.submitReservationRequest({ contact, ids: listed })).rejects.toMatchObject({
+      code: "RESERVATION_LIST_EMPTY",
+    });
+    expect(opac.log).toEqual([]);
   });
 });
