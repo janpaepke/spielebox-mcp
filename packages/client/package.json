@@ -1,6 +1,6 @@
 {
   "name": "@janpaepke/spielebox-client",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "Unofficial typed client for the WIENXTRA-Spielebox online catalog (opac.wienxtra.at); not affiliated with WIENXTRA",
   "license": "MIT",
   "private": true,

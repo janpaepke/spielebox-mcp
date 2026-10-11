@@ -119,8 +119,12 @@ async function until(check, ms = 20000) {
   for (const start = Date.now(); !check(); await sleep(25)) if (Date.now() - start > ms) throw new Error("timeout");
 }
 go.addEventListener("click", async () => {
-  const helper = window.open(blank, "spielebox-helfer", "popup,width=420,height=240");
+  // As small and out of the way as browsers allow: they keep pop-ups on screen and at a minimum size (no pop-unders),
+  // so a 1×1 window in the bottom-right corner ends up as the smallest window at that edge.
+  const right = (screen.availLeft ?? 0) + screen.availWidth, bottom = (screen.availTop ?? 0) + screen.availHeight;
+  const helper = window.open(blank, "spielebox-helfer", "popup,width=1,height=1,left=" + right + ",top=" + bottom);
   if (!helper) { status.textContent = "Der Browser hat das Fenster blockiert. Bitte Pop-ups für diese Seite erlauben und erneut klicken."; return; }
+  window.focus(); // some browsers let the page take focus back from the helper; others ignore it
   go.disabled = true; list.hidden = false;
   list.innerHTML = steps.map((s) => "<li>" + labels[s.kind] + "</li>").join("");
   const run = Date.now().toString(36);
