@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/server";
+import { SpieleboxClient } from "@janpaepke/spielebox-client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { createServer } from "./server.ts";
 
-serveStdio(() => new McpServer({ name: "spielebox", version: "0.0.0" }));
+const client = new SpieleboxClient();
+serveStdio(() => createServer(client));

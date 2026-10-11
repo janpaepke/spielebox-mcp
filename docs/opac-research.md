@@ -21,7 +21,7 @@ against the live site unless marked otherwise.
 | Full result list | same + `printlist=true` | **All hits in one response**, same markup as list. Also seeds the session for details. |
 | Facet drill-down (UI) | `newsearch=false&…&<facet>=<id>` | Works statelessly too when `sword` is repeated. |
 | New acquisitions | `newmedia=true&newsearch=true&location=sb` | Paged list (~11 pages today). Facets apply (seen in archived URLs). |
-| Detail | `media=<md5>&location=sb` | **Session-bound**: only resolves if the id is in the current session's last result set, else `id="errorbox"`. |
+| Detail | `media=<md5>&location=sb` | **Session-bound**: only resolves if the id is in the session's last search result set, else `id="errorbox"`. The session keeps the **full** result set: after a page-1 search, details of hits on later pages resolve too. |
 | Expand facet lists | `moreyears=true`, `morecws=true`, `moreauthors=true`, `moreagefrom=true` | Shows all values of a facet. |
 | Imprint | `imprint=true` | |
 | Merkliste / pre-order | `basket=add\|remove&media=<md5>`, `basketinfo`, `showbasket`, `orderbasket`, `deletebasket` | Session-based basket → online pre-order form. See [Merkliste & pre-order](#merkliste--pre-order). |
@@ -45,6 +45,9 @@ hit renders the normal list (no redirect to the detail page).
 - Matching is **substring, contiguous phrase**: `cata` matches, `die siedler` matches, `catan kosmos` does not. No AND/OR, no quotes, no wildcards (`catan*` → 0).
 - Searched fields include title, author, description (e.g. a term from a blurb returns unrelated titles) ⇒ clients should offer title filtering.
 - No hits → `<div id="messagebox">` with an "Infomeldung".
+- `offset`, `sortorder`, `morecws=true` and `printlist=true` all work statelessly with `newsearch=true`. `printlist` honors facets but renders no facet box.
+- Each facet kind takes **one value**: repeating a param (`cwid=a&cwid=b`) applies only the last one.
+- Sorting is ascending only (`sortorder=md5("erscheinungsjahr")` → 1995, 1995, 1997 …).
 
 ## Identifiers
 
@@ -54,7 +57,7 @@ hit renders the normal list (no redirect to the detail page).
 | Copy | `Mediennummer` integer (e.g. `54559`) on the detail page | Yes |
 | `agefromid`, `maxdurationid`, `yearid` | `md5(value)`: `md5("10")` = "ab 10 Jahren", `md5("90")` = "bis zu 90 Minuten", `md5("2025")` | **Yes — computable** |
 | `sortorder` | `md5(column)`: `md5("erscheinungsjahr")`, `md5("alter_von")`, `md5("systematik")`; title/author ids not reversed but constant | Yes |
-| `gamerid`, `cwid` (Schlagworte), `medid`, `standid` | PHP `uniqid()` (hex timestamp prefix) | **No.** Prefix decodes to 2026-10-10 03:00 today; Wayback shows `56f5ed3a…` (2016), `5947221a…` (2017). Regenerated on import ⇒ must be resolved **by label** from a search page each time. |
+| `gamerid`, `cwid` (Schlagworte), `medid`, `standid` | PHP `uniqid()` (hex timestamp prefix) | **No.** The prefix decodes to 2026-10-10 03:00. Wayback shows `56f5ed3a…` (2016) and `5947221a…` (2017). On 2026-10-11 they were *unchanged*, so they are regenerated on (irregular) catalog imports, not nightly ⇒ resolve **by label**, cache the map, refresh it on mismatch. |
 
 ## Data available
 

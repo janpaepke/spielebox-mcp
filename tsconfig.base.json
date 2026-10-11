@@ -11,6 +11,8 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "declaration": true,
     "noEmit": true
