@@ -27,6 +27,9 @@ can collect games on a reservation list. Reserving always asks you first (see [R
 3. Optional: enter your name, e-mail and phone in the extension's settings. They only prefill the confirmation of reservation
    requests.
 
+Updates: when a new version is out, the assistant tells you once in the chat. Download the new `spielebox.mcpb` and double-click
+it again.
+
 No other software is needed: Claude Desktop brings its own Node.js.
 
 ### Claude Code
@@ -96,7 +99,9 @@ it. Warranty and liability are governed by the [license](LICENSE) to the extent 
 **Privacy.** The software runs locally on your computer. Your contact details are stored only in your local configuration and are
 sent directly to WIENXTRA only when you confirm a reservation request; WIENXTRA's [privacy policy](https://wienxtra.at/datenschutz)
 applies to that data. The developer receives no data. Search queries and results, and contact details entered in your AI
-assistant's confirmation form, pass through your AI assistant and are subject to its provider's terms.
+assistant's confirmation form, pass through your AI assistant and are subject to its provider's terms. To tell you about new
+versions, the software asks GitHub once per start (at the first use) for the latest release; GitHub sees your IP address, nothing
+else is sent. You can turn this off in the extension's settings ("Check for updates").
 
 <details lang="de">
 <summary>Deutsch</summary>
@@ -118,7 +123,9 @@ gesetzlich zulässig.
 gespeichert und nur bei einer von Ihnen bestätigten Reservierungsanfrage direkt an WIENXTRA übermittelt; für diese Daten gilt die
 [Datenschutzerklärung von WIENXTRA](https://wienxtra.at/datenschutz). Der Entwickler erhält keine Daten. Suchanfragen und
 Ergebnisse sowie Kontaktdaten, die Sie im Bestätigungsformular Ihres KI-Assistenten eingeben, laufen über Ihren KI-Assistenten und
-unterliegen den Bedingungen von dessen Anbieter.
+unterliegen den Bedingungen von dessen Anbieter. Um Sie über neue Versionen zu informieren, fragt das Programm einmal pro Start (bei
+der ersten Verwendung) bei GitHub nach der neuesten Version; GitHub sieht dabei Ihre IP-Adresse, sonst wird nichts übermittelt.
+Sie können das in den Einstellungen der Erweiterung abschalten („Check for updates“).
 
 </details>
 

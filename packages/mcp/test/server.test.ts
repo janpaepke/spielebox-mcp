@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOpac } from "../../client/test/fake-opac.ts";
 import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "../src/consent/index.ts";
 import { type CatalogClient, createServer, type ServerOptions } from "../src/server.ts";
+import { UpdateCheck } from "../src/updates.ts";
 
 type ElicitAnswer = { action: "accept" | "decline" | "cancel"; content?: Record<string, string | boolean> };
 type ElicitParams = { mode?: "form" | "url"; message: string; requestedSchema?: unknown; url?: string };
@@ -123,6 +124,26 @@ describe("spielebox MCP server", () => {
     const mcp = await connect(stub(), { options: {} });
     const { tools } = await mcp.listTools();
     expect(tools.map((t) => t.name)).not.toContain("submit_reservation_request");
+  });
+
+  it("passes an update notice along once, without touching the structured result", async () => {
+    const updates = new UpdateCheck({
+      currentVersion: "0.4.0",
+      repository: "x/y",
+      howToUpdate: "Get it:",
+      fetch: async () => new Response(JSON.stringify({ tag_name: "v0.5.0", html_url: "https://example.org/r" })),
+    });
+    const mcp = await connect(stub(), { options: { updates } });
+    const first = await mcp.callTool({ name: "search_games", arguments: { term: "catan" } });
+    await new Promise((r) => setTimeout(r, 0));
+    const second = await mcp.callTool({ name: "search_games", arguments: { term: "catan" } });
+    const third = await mcp.callTool({ name: "search_games", arguments: { term: "catan" } });
+    const texts = (r: typeof first) => (r.content as { text: string }[]).map((c) => c.text);
+    const notices = [first, second, third].flatMap(texts).filter((t) => t.startsWith("Update available"));
+    expect(notices).toEqual([
+      "Update available: spielebox-mcp 0.5.0 (installed: 0.4.0). Get it: https://example.org/r",
+    ]);
+    expect(second.structuredContent).toEqual(EMPTY);
   });
 
   it("relays arguments to the client and returns structured content", async () => {

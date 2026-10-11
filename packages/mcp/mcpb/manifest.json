@@ -26,7 +26,9 @@
         "SPIELEBOX_FIRST_NAME": "${user_config.first_name}",
         "SPIELEBOX_LAST_NAME": "${user_config.last_name}",
         "SPIELEBOX_EMAIL": "${user_config.email}",
-        "SPIELEBOX_PHONE": "${user_config.phone}"
+        "SPIELEBOX_PHONE": "${user_config.phone}",
+        "SPIELEBOX_CHECK_UPDATES": "${user_config.check_updates}",
+        "SPIELEBOX_DISTRIBUTION": "mcpb"
       }
     }
   },
@@ -92,6 +94,13 @@
       "title": "Phone",
       "description": "Prefills the confirmation of reservation requests (optional)",
       "required": false
+    },
+    "check_updates": {
+      "type": "boolean",
+      "title": "Check for updates",
+      "description": "Ask GitHub once per app start whether a newer version exists, and tell you in the chat",
+      "required": false,
+      "default": true
     }
   },
   "compatibility": {

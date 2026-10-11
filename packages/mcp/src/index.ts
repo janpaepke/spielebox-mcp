@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { SpieleboxClient } from "@janpaepke/spielebox-client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import pkg from "../package.json" with { type: "json" };
 import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "./consent/index.ts";
 import { createServer } from "./server.ts";
+import { UpdateCheck } from "./updates.ts";
 
 const env = (name: string) => process.env[name] || undefined;
 
@@ -19,4 +21,16 @@ const contact = {
   phone: env("SPIELEBOX_PHONE"),
 };
 
-serveStdio(() => createServer(client, { consent, contact }));
+const updates =
+  env("SPIELEBOX_CHECK_UPDATES") === "false"
+    ? undefined
+    : new UpdateCheck({
+        currentVersion: pkg.version,
+        repository: "janpaepke/spielebox-mcp",
+        howToUpdate:
+          env("SPIELEBOX_DISTRIBUTION") === "mcpb"
+            ? "Download spielebox.mcpb from the release page and double-click it to update:"
+            : "Release notes:",
+      });
+
+serveStdio(() => createServer(client, { consent, contact, updates }));

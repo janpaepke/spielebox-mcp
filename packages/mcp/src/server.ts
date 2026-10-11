@@ -16,6 +16,7 @@ import { type CallToolResult, type InputRequiredResult, McpServer } from "@model
 import * as z from "zod";
 import pkg from "../package.json" with { type: "json" };
 import { type ConsentGate, elicitationModes } from "./consent/gate.ts";
+import type { UpdateCheck } from "./updates.ts";
 
 /** The client methods the server relays to. */
 export type CatalogClient = Pick<
@@ -40,6 +41,8 @@ export type ServerOptions = {
   consent?: ConsentGate;
   /** Defaults for the contact fields shown in the consent step (e.g. from env). */
   contact?: Partial<Contact>;
+  /** Tells the user once per process when a newer release exists. Must be shared by all server instances. */
+  updates?: UpdateCheck;
 };
 
 const INSTRUCTIONS = `Unofficial tools (not affiliated with WIENXTRA) for the WIENXTRA-Spielebox in Vienna, Austria's largest board game library (~9000 games, lent for free or a small fee).
@@ -49,6 +52,7 @@ Catalog data is German. Typical flow: search_games (or list_new_games) → get_g
 - Availability changes often; every result has an asOf time. Game ids are only valid for this server instance after a search found them.
 - onlineReservationRequired: the game must be reserved online before pickup.
 - The reservation list stages games for a reservation request (the catalog's "Merkliste"); it lives in this server's memory.
+- If a tool result contains an "Update available" note, pass it on to the user once.
 - submit_reservation_request sends the list to the Spielebox. It is binding for the user, so it always asks the user to confirm (in a form, or on a page in the browser); never call it without the user asking for it. Success means "request sent": the staff confirm by e-mail when the games are ready.`;
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
@@ -64,7 +68,15 @@ const SubmitOutcome = z.object({
 
 /** Builds the MCP server. Each tool validates with the client's schemas and relays to one client method. */
 export function createServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
-  const { consent, contact = {} } = options;
+  const { consent, contact = {}, updates } = options;
+
+  /** Relays a client call; the first call also starts the update check, and a pending update notice rides along once. */
+  const relay = async <T extends Record<string, unknown>>(call: () => Promise<T>): Promise<CallToolResult> => {
+    updates?.start();
+    const result = await toResult(call);
+    const notice = await updates?.takeNotice();
+    return notice ? { ...result, content: [...result.content, { type: "text", text: notice }] } : result;
+  };
   const server = new McpServer(
     { name: "spielebox", version: pkg.version },
     { instructions: INSTRUCTIONS, ...(consent && { requestState: { verify: consent.verify } }) },
@@ -228,7 +240,7 @@ function notSent(reason: string): CallToolResult {
 }
 
 /** Turns a client result into structured tool output, and client errors into tool errors the model can act on. */
-async function relay<T extends Record<string, unknown>>(call: () => Promise<T>) {
+async function toResult<T extends Record<string, unknown>>(call: () => Promise<T>): Promise<CallToolResult> {
   try {
     const result = await call();
     return { content: [{ type: "text" as const, text: JSON.stringify(result) }], structuredContent: result };
