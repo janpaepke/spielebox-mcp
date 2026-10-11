@@ -389,3 +389,21 @@ describe("planOrderFormHandoff", () => {
     await expect(client.planOrderFormHandoff()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
   });
 });
+
+describe("planGamePageHandoff", () => {
+  it("plans the search that found the game, then its detail page", async () => {
+    await client.search({ term: "catan" });
+    await client.search({ term: "catan connect" });
+    const plan = await client.planGamePageHandoff({ id: MENSCHHEIT });
+    expect(plan.title).toBe("ABENTEUER MENSCHHEIT");
+    expect(plan.steps).toEqual([
+      { kind: "search", url: "https://opac.wienxtra.at/index.php?newsearch=true&sword=catan&location=sb" },
+      { kind: "detail", url: `https://opac.wienxtra.at/index.php?media=${MENSCHHEIT}&location=sb` },
+    ]);
+  });
+
+  it("refuses ids it never saw", async () => {
+    await expect(client.planGamePageHandoff({ id: CONNECT })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(opac.log).toEqual([]);
+  });
+});

@@ -13,6 +13,9 @@ import {
   type FacetValue,
   type Filters,
   type GameDetails,
+  type GamePageParams,
+  GamePageParams as GamePageParamsSchema,
+  type GamePagePlan,
   type GameSummary,
   type GetGamesParams,
   GetGamesParams as GetGamesParamsSchema,
@@ -213,6 +216,30 @@ export class SpieleboxClient {
       this.#http.dropIdleSession();
       for (const id of this.#reservationList) this.#details.delete(id);
       return this.#describeReservationList([]);
+    });
+  }
+
+  /**
+   * Plans opening a game's catalog detail page in the user's browser. Detail pages only resolve within a session whose
+   * last search found the game, so the browser runs that search first. Only games the client has seen can be planned.
+   */
+  async planGamePageHandoff(params: GamePageParams): Promise<GamePagePlan> {
+    const { id } = GamePageParamsSchema.parse(params);
+    return this.#lock.run(async () => {
+      this.#http.dropIdleSession();
+      const { groups } = this.#groupByLocator([id]);
+      const [group] = groups;
+      if (!group) throw new SpieleboxError("NOT_FOUND", "Unknown game: search for it first");
+      const { games } = await this.#getGames([id]);
+      const title = games[0]?.title;
+      if (!title) throw new SpieleboxError("NOT_FOUND", "Game not found in the catalog anymore");
+      return {
+        title,
+        steps: [
+          { kind: "search", url: this.#http.url(locatorQuery(group.locator)) },
+          { kind: "detail", url: this.#http.url({ media: id }) },
+        ],
+      };
     });
   }
 

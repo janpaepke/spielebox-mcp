@@ -1,6 +1,6 @@
 {
   "name": "spielebox-mcp",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Unofficial MCP server for the WIENXTRA-Spielebox online catalog; not affiliated with WIENXTRA",
   "license": "MIT",
   "private": true,

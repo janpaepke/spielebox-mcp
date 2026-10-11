@@ -83,6 +83,7 @@ function stub(overrides: Partial<CatalogClient> = {}): CatalogClient {
     getReservationList: vi.fn(async () => EMPTY_LIST),
     prepareReservationRequest: vi.fn(async () => EMPTY_LIST),
     planOrderFormHandoff: vi.fn(async () => ({ items: [], steps: [] })),
+    planGamePageHandoff: vi.fn(async () => ({ title: "CATAN Connect", steps: [] })),
     submitReservationRequest: vi.fn(async () => SENT),
     ...overrides,
   };
@@ -476,6 +477,17 @@ describe("open_order_form", () => {
       arguments: {},
     });
     expect(JSON.stringify(result.content)).toContain("open_order_form");
+  });
+
+  it("opens a game's catalog page, read-only", async () => {
+    const setup = withHandoff(stub());
+    const mcp = await setup.connect();
+    const { tools } = await mcp.listTools();
+    expect(tools.find((t) => t.name === "open_game_page")?.annotations).toMatchObject({ readOnlyHint: true });
+    const result = await mcp.callTool({ name: "open_game_page", arguments: { id: "a".repeat(32) } });
+    expect(result.structuredContent).toMatchObject({ title: "CATAN Connect" });
+    expect(setup.opened).toHaveLength(1);
+    expect(await (await fetch(setup.opened[0] ?? "")).text()).toContain("<h1>CATAN Connect</h1>");
   });
 
   it("plans against the fake catalog end to end", async () => {

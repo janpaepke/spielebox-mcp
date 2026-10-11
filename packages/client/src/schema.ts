@@ -169,11 +169,11 @@ export const ReservationRequestResult = z.object({
 export type ReservationRequestResult = z.infer<typeof ReservationRequestResult>;
 
 /**
- * One page load of the handoff: the user's browser walks through these catalog URLs to put the reservation list on its
- * own Merkliste and end on the catalog's order form, where the user submits the request themselves.
+ * One page load of a handoff: the user's browser walks through these catalog URLs to reach a catalog page that only
+ * works within a session (the order form with the reservation list, or a game's detail page).
  */
 export const HandoffStep = z.object({
-  kind: z.enum(["clear", "search", "add", "form"]),
+  kind: z.enum(["clear", "search", "add", "form", "detail"]),
   url: z.url(),
 });
 export type HandoffStep = z.infer<typeof HandoffStep>;
@@ -183,3 +183,12 @@ export const HandoffPlan = z.object({
   steps: z.array(HandoffStep),
 });
 export type HandoffPlan = z.infer<typeof HandoffPlan>;
+
+export const GamePageParams = z.object({ id: MediaId });
+export type GamePageParams = z.input<typeof GamePageParams>;
+
+export const GamePagePlan = z.object({
+  title: z.string(),
+  steps: z.array(HandoffStep),
+});
+export type GamePagePlan = z.infer<typeof GamePagePlan>;

@@ -21,6 +21,10 @@
       "description": "Neu in den Katalog aufgenommene Spiele"
     },
     {
+      "name": "open_game_page",
+      "description": "Die Seite eines Spiels im Katalog der Spielebox im Browser öffnen"
+    },
+    {
       "name": "reservation_list_add",
       "description": "Spiele auf die Reservierungsliste setzen"
     },

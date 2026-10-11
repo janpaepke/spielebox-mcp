@@ -13,6 +13,7 @@ check what's available right now, and send a reservation request for pickup.
 - *"Which cooperative games for 4 players, suitable for a 10-year-old, are available at the Spielebox right now?"*
 - *"Is Flügelschlag available? How many copies?"*
 - *"What's new at the Spielebox?"*
+- *"Show me the Spielebox page of Flügelschlag."*
 - *"Put Planet Unknown and Colt Express on my reservation list and reserve them."*
 
 The assistant searches the catalog, filters by players, age, play time and availability, looks up the status of each copy, and
@@ -78,6 +79,7 @@ environment variables above. Reservation requests need a client that supports MC
 | `get_games` | Full details for up to 10 games: description, keywords, play time, availability of each copy. |
 | `list_filters` | Keywords (e.g. *Kooperationsspiele*, *ausgezeichnet*), player counts, ages and play times for a term. |
 | `list_new_games` | Recently added games. |
+| `open_game_page` | Opens a game's page in the Spielebox catalog in your browser (one click on a small local page). |
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | A list of games for your next reservation request. It lives only in the running server, not on the catalog. |
 | `submit_reservation_request` | Sends the reservation list to the Spielebox, after your confirmation (clients with forms, e.g. Claude Code). |
 | `open_order_form` | Opens the Spielebox's order form in your browser with the reservation list on it; you submit it there (e.g. Claude Desktop). |
@@ -102,6 +104,8 @@ A sent request is not yet a booking: the Spielebox staff prepare the games and c
 - **Search** matches a contiguous piece of text in titles, authors, descriptions and keywords, at least 3 characters, no AND/OR.
   Search for one distinctive word (*"flügelschlag"*) or part of the title (*"die siedler"*).
 - **Availability** changes all the time; results show when they were read.
+- **Catalog links:** the Spielebox's detail pages only work right after a search in the same browser session, so a copied link
+  shows an error. Ask the assistant to open a game's page instead; it lets your browser run the search first.
 - **The catalog has no API.** This project reads the same web pages you would see in a browser. When the Spielebox changes its
   website, things can break until this project is updated.
 - **Gentle by design:** one request at a time, at least 500 ms apart, only for what you ask. No crawling, no copies of the catalog.

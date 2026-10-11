@@ -50,6 +50,10 @@
       "description": "Games recently added to the catalog"
     },
     {
+      "name": "open_game_page",
+      "description": "Open a game's page in the Spielebox catalog in your browser"
+    },
+    {
       "name": "reservation_list_add",
       "description": "Add games to the reservation list"
     },

@@ -15,6 +15,7 @@ describe("HandoffPages", () => {
   it("serves the plan with a nonce-bound script and escaped content, without personal data", async () => {
     pages = new HandoffPages();
     const url = await pages.create({
+      purpose: "order",
       titles: ["CATAN Connect", "<img src=x onerror=alert(1)>"],
       steps: STEPS,
     });
@@ -30,11 +31,14 @@ describe("HandoffPages", () => {
     expect(html).not.toContain("data-copy");
     expect(html).toContain(JSON.stringify(STEPS[2]?.url));
     expect(html).toContain("Merkliste füllen und Bestellformular öffnen");
+    // The cache-busting regex must reach the browser intact.
+    expect(html).toContain("/([?&]deletebasket=)\\d+/");
   });
 
   it("keeps values from closing the script tag", async () => {
     pages = new HandoffPages();
     const url = await pages.create({
+      purpose: "order",
       titles: ["x"],
       steps: [{ kind: "form", url: "https://opac.wienxtra.at/index.php?x=</script><script>alert(1)</script>" }],
     });
@@ -42,10 +46,27 @@ describe("HandoffPages", () => {
     expect(html.match(/<\/script>/g)).toHaveLength(1);
   });
 
+  it("serves a game page with its own texts and steps", async () => {
+    pages = new HandoffPages();
+    const url = await pages.create({
+      purpose: "game",
+      title: "CATAN <Connect>",
+      steps: [
+        { kind: "search", url: "https://opac.wienxtra.at/index.php?newsearch=true&sword=catan&location=sb" },
+        { kind: "detail", url: "https://opac.wienxtra.at/index.php?media=x&location=sb" },
+      ],
+    });
+    const html = await (await fetch(url)).text();
+    expect(html).toContain("<h1>CATAN &lt;Connect&gt;</h1>");
+    expect(html).toContain("Detailseite öffnen");
+    expect(html.split("<script")[0]).not.toContain("Merkliste");
+    expect(html).toContain('"tab":"spielebox-katalog"');
+  });
+
   it("answers unknown, expired and non-GET requests without the plan", async () => {
     let now = 0;
     pages = new HandoffPages({ ttlMs: 1000, now: () => now });
-    const url = await pages.create({ titles: ["x"], steps: STEPS });
+    const url = await pages.create({ purpose: "order", titles: ["x"], steps: STEPS });
     expect((await fetch(`${url.slice(0, -4)}AAAA`)).status).toBe(404);
     expect((await fetch(url, { method: "POST" })).status).toBe(405);
     now = 2000;

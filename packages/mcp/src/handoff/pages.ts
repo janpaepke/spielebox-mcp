@@ -3,15 +3,16 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { HandoffStep } from "@janpaepke/spielebox-client";
 import { closeLocalServer, escapeHtml, type LocalServer, page, send, startLocalServer } from "../web/local.ts";
 
-export type Handoff = {
-  titles: string[];
-  steps: HandoffStep[];
-};
+/** What a handoff leads to: the order form with the reservation list, or one game's detail page. */
+export type Handoff =
+  | { purpose: "order"; titles: string[]; steps: HandoffStep[] }
+  | { purpose: "game"; title: string; steps: HandoffStep[] };
 
 /**
- * Local pages that hand the reservation list over to the user's browser: one click walks a second tab through the
- * catalog pages of the plan (clear Merkliste → searches → adds), ending on the catalog's official order form with the
- * games listed. The user submits there; nothing is sent on their behalf.
+ * Local pages that hand a catalog page to the user's browser. Some catalog pages only work within a session (the order
+ * form with the Merkliste, a game's detail page), so one click walks a second tab through the catalog pages of the plan
+ * (e.g. clear Merkliste → searches → adds → order form, or search → detail page). The user acts on the official site;
+ * nothing is sent on their behalf.
  *
  * Served on 127.0.0.1 via an unguessable ticket (`/h/<ticket>`), no personal data in the URL. The step URLs only point
  * to the catalog, and the page's script only runs with the per-response nonce.
@@ -53,7 +54,7 @@ export class HandoffPages {
       return send(
         res,
         404,
-        page("Abgelaufen", "<p>Dieser Link ist abgelaufen. Bitte Claude, das Bestellformular erneut zu öffnen.</p>"),
+        page("Abgelaufen", "<p>Dieser Link ist abgelaufen. Bitte Claude, ihn erneut zu öffnen.</p>"),
       );
     }
     if (req.method !== "GET") return send(res, 405, page("Fehler", "<p>Nicht erlaubt.</p>"));
@@ -62,23 +63,47 @@ export class HandoffPages {
   }
 }
 
-function handoffPage(handoff: Handoff, nonce: string): string {
-  // Inline JSON inside <script>: escape "<" so no value can close the tag.
-  const plan = JSON.stringify({ steps: handoff.steps }).replace(/</g, "\\u003c");
-  return page(
-    "Reservierungsanfrage",
-    `<h1>Reservierungsanfrage an die Spielebox</h1>
+/** Texts per purpose; everything else (the step runner) is shared. */
+function content(handoff: Handoff) {
+  if (handoff.purpose === "game") {
+    return {
+      title: handoff.title,
+      body: `<h1>${escapeHtml(handoff.title)}</h1>
+<p>Ein Klick öffnet die Detailseite dieses Spiels im Katalog der Spielebox, in einem neuen Tab.</p>`,
+      button: "Detailseite öffnen",
+      note: "",
+      done: "Fertig: Die Detailseite ist im anderen Tab offen.",
+      tab: "spielebox-katalog",
+    };
+  }
+  return {
+    title: "Reservierungsanfrage",
+    body: `<h1>Reservierungsanfrage an die Spielebox</h1>
 <ul>${handoff.titles.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
 <p>Ein Klick legt diese Spiele in einem neuen Tab auf die Merkliste der Spielebox und öffnet dort das offizielle Bestellformular.
-Du füllst es aus und schickst es <strong>selbst</strong> ab – vorher wird nichts gesendet.</p>
-<button class="primary" id="go" type="button">Merkliste füllen und Bestellformular öffnen</button>
+Du füllst es aus und schickst es <strong>selbst</strong> ab – vorher wird nichts gesendet.</p>`,
+    button: "Merkliste füllen und Bestellformular öffnen",
+    note: `<p class="note">Bitte prüfe im Formular, ob alle Spiele aufgelistet sind. Fehlt eines, klicke den Knopf hier einfach noch einmal.
+Deine Kontaktdaten kann dein Browser dort meist automatisch ausfüllen.</p>`,
+    done: "Fertig: Das Bestellformular ist im anderen Tab offen. Dort ausfüllen und abschicken.",
+    tab: "spielebox-bestellung",
+  };
+}
+
+function handoffPage(handoff: Handoff, nonce: string): string {
+  const text = content(handoff);
+  // Inline JSON inside <script>: escape "<" so no value can close the tag.
+  const plan = JSON.stringify({ steps: handoff.steps, done: text.done, tab: text.tab }).replace(/</g, "\\u003c");
+  return page(
+    text.title,
+    `${text.body}
+<button class="primary" id="go" type="button">${text.button}</button>
 <p id="status" class="note" aria-live="polite"></p>
 <ol class="steps" id="steps" hidden></ol>
-<p class="note">Bitte prüfe im Formular, ob alle Spiele aufgelistet sind. Fehlt eines, klicke den Knopf hier einfach noch einmal.
-Deine Kontaktdaten kann dein Browser dort meist automatisch ausfüllen.</p>
+${text.note}
 <script nonce="${nonce}">
-const { steps } = ${plan};
-const labels = { clear: "Merkliste leeren", search: "Spiele suchen", add: "Spiel auf die Merkliste", form: "Bestellformular öffnen" };
+const { steps, done, tab: tabName } = ${plan};
+const labels = { clear: "Merkliste leeren", search: "Im Katalog suchen", add: "Spiel auf die Merkliste", form: "Bestellformular öffnen", detail: "Detailseite öffnen" };
 const list = document.getElementById("steps"), status = document.getElementById("status"), go = document.getElementById("go");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The catalog tab can't be inspected, but it is readable while it shows a page of our own origin and unreadable once
@@ -89,12 +114,12 @@ const ours = (tab) => { try { return tab.location.href === blank && tab.document
 // The catalog lets browsers cache some responses for hours (e.g. clearing the Merkliste), so every page load gets a
 // unique URL, as the catalog's own scripts do. deletebasket only accepts a number.
 const fresh = (url, id) =>
-  url.replace(/([?&]deletebasket=)d+/, "$1" + Math.random()) + "&_=" + id;
+  url.replace(/([?&]deletebasket=)\\d+/, "$1" + Math.random()) + "&_=" + id;
 async function until(check, ms = 20000) {
   for (const start = Date.now(); !check(); await sleep(25)) if (Date.now() - start > ms) throw new Error("timeout");
 }
 go.addEventListener("click", async () => {
-  const tab = window.open(blank, "spielebox-bestellung");
+  const tab = window.open(blank, tabName);
   if (!tab) { status.textContent = "Der Browser hat das neue Tab blockiert. Bitte Pop-ups für diese Seite erlauben und erneut klicken."; return; }
   go.disabled = true; list.hidden = false;
   list.innerHTML = steps.map((s) => "<li>" + labels[s.kind] + "</li>").join("");
@@ -109,7 +134,7 @@ go.addEventListener("click", async () => {
       list.children[i].className = "done";
     }
     tab.focus();
-    status.textContent = "Fertig: Das Bestellformular ist im anderen Tab offen. Dort ausfüllen und abschicken.";
+    status.textContent = done;
   } catch {
     status.textContent = "Die Spielebox hat zu lange nicht geantwortet. Bitte noch einmal versuchen.";
   }

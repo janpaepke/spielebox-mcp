@@ -1,6 +1,7 @@
 import {
   type Contact,
   Filters,
+  GamePageParams,
   GetGamesParams,
   GetGamesResult,
   NewGamesParams,
@@ -34,6 +35,7 @@ export type CatalogClient = Pick<
   | "prepareReservationRequest"
   | "submitReservationRequest"
   | "planOrderFormHandoff"
+  | "planGamePageHandoff"
 >;
 
 export type ServerOptions = {
@@ -47,8 +49,8 @@ export type ServerOptions = {
   /** Tells the user once per process when a newer release exists. Must be shared by all server instances. */
   updates?: UpdateCheck;
   /**
-   * Hands the reservation list over to the user's browser, ending on the catalog's own order form. Must be shared by
-   * all server instances. Without it, `open_order_form` isn't offered.
+   * Hands catalog pages that only work within a session (order form, game detail pages) to the user's browser. Must be
+   * shared by all server instances. Without it, `open_order_form` and `open_game_page` aren't offered.
    */
   handoff?: { pages: HandoffPages; openBrowser: (url: string) => void };
 };
@@ -59,6 +61,7 @@ Catalog data is German. Typical flow: search_games (or list_new_games) → get_g
 - Filter with players/age/maxDuration/availableOnly; use list_filters to discover keywords like "Kooperationsspiele" or "ausgezeichnet" (award-winning).
 - Availability changes often; every result has an asOf time. Game ids are only valid for this server instance after a search found them.
 - onlineReservationRequired: the game must be reserved online before pickup.
+- To show the user a game's page in the Spielebox catalog, use open_game_page (catalog detail links don't work on their own).
 - The reservation list stages games for a reservation request (the catalog's "Merkliste"); it lives in this server's memory.
 - If a tool result contains an "Update available" note, pass it on to the user once.
 - To reserve, call submit_reservation_request: it asks the user to confirm and sends the list (binding for the user; only when the user asks for it). If it reports that this client can't show a confirmation, call open_order_form instead: it opens the Spielebox's official order form in the user's browser with the games on it, and the user submits it there. Either way, the staff confirm by e-mail when the games are ready.`;
@@ -74,6 +77,12 @@ const OrderFormOpened = z.object({
     .describe("Local page that hands the list over to the catalog's order form; give it to the user if it didn't open"),
   items: z.array(ReservationListItem),
   note: z.string(),
+});
+
+/** Result of open_game_page. */
+const GamePageOpened = z.object({
+  url: z.string().describe("Local page that opens the game's catalog page; give it to the user if it didn't open"),
+  title: z.string(),
 });
 
 /** Result of submit_reservation_request: either the request was sent, or why nothing was sent. */
@@ -213,6 +222,7 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
         relay(async () => {
           const plan = await client.planOrderFormHandoff();
           const url = await handoff.pages.create({
+            purpose: "order",
             titles: plan.items.map((i) => i.title),
             steps: plan.steps,
           });
@@ -224,6 +234,28 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
               "A page opened in the user's browser (link above if it didn't). One click there puts the games on the " +
               "Spielebox's Merkliste and opens its order form; the user submits it there. Nothing has been sent yet.",
           };
+        }),
+    );
+  }
+
+  if (handoff) {
+    server.registerTool(
+      "open_game_page",
+      {
+        title: "Open game page",
+        description:
+          "Open a game's detail page in the Spielebox catalog in the user's browser (one click on a local page; the catalog's " +
+          "detail pages only work after a search, which the browser runs first). Ids must come from earlier results.",
+        inputSchema: GamePageParams,
+        outputSchema: GamePageOpened,
+        annotations: READ_ONLY,
+      },
+      (params) =>
+        relay(async () => {
+          const plan = await client.planGamePageHandoff(params);
+          const url = await handoff.pages.create({ purpose: "game", title: plan.title, steps: plan.steps });
+          handoff.openBrowser(url);
+          return { url, title: plan.title };
         }),
     );
   }

@@ -206,6 +206,10 @@ MCP Apps extension), so no consent channel can run there, and `submit_reservatio
   extension therefore has no contact settings at all; only `check_updates` remains in its `user_config`.
 - Claude Desktop passes the literal `${user_config.x}` for optional settings left empty; the server treats those as unset.
 
+The same mechanism opens a **game's detail page** (`open_game_page`): the client plans search → detail page from the
+game's locator, and the shared handoff page (purpose `game`) walks the browser there. Catalog detail links don't work on
+their own, because detail pages are bound to the session's last search.
+
 ### Clients (verified 2026-10-11)
 
 - **Claude Code** declares form and URL elicitation → form channel.
