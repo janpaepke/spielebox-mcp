@@ -19,10 +19,9 @@ Rough plan, not a promise. Main target: **Claude Desktop**.
 
 ## Deferred
 
+- **Confirmation inside the chat** (MCP Apps) for Claude Desktop, instead of the browser handoff to the order form.
 - **Automatic updates** through a Claude plugin marketplace (works in Claude Code and Cowork, not in Claude Desktop's chat). Until
   then, the extension tells you in the chat when a new release is out.
-- **Consent without elicitation:** the server opening the local confirmation page itself, for clients that can't show a form or a
-  link. Only needed if such a client becomes a target.
 - **Remote server** for claude.ai on the web and mobile. Would need hosting, sign-in and per-user state.
 
 ## Watching

@@ -167,3 +167,19 @@ export const ReservationRequestResult = z.object({
   sentAt: z.iso.datetime(),
 });
 export type ReservationRequestResult = z.infer<typeof ReservationRequestResult>;
+
+/**
+ * One page load of the handoff: the user's browser walks through these catalog URLs to put the reservation list on its
+ * own Merkliste and end on the catalog's order form, where the user submits the request themselves.
+ */
+export const HandoffStep = z.object({
+  kind: z.enum(["clear", "search", "add", "form"]),
+  url: z.url(),
+});
+export type HandoffStep = z.infer<typeof HandoffStep>;
+
+export const HandoffPlan = z.object({
+  items: z.array(ReservationListItem),
+  steps: z.array(HandoffStep),
+});
+export type HandoffPlan = z.infer<typeof HandoffPlan>;

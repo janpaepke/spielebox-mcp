@@ -51,9 +51,14 @@ export class Transport {
     if (this.#cookie && this.#options.now() - this.#lastRequestAt > SESSION_IDLE_MS) this.resetSession();
   }
 
+  /** The catalog URL for the given params (`location` is added). */
+  url(params: Record<string, string>): string {
+    return `${this.#options.baseUrl}?${new URLSearchParams({ ...params, location: LOCATION })}`;
+  }
+
   /** GET `index.php` with the given params (`location` is added). Returns the HTML. */
   async get(params: Record<string, string>): Promise<string> {
-    const url = `${this.#options.baseUrl}?${new URLSearchParams({ ...params, location: LOCATION })}`;
+    const url = this.url(params);
     const html = await this.#queue.add(() => this.#getWithRetry(url));
     if (html === undefined) throw new HttpError(`Request aborted: ${url}`);
     return html;
@@ -63,7 +68,7 @@ export class Transport {
    * POSTs a form to `index.php?<query>`. **Never retried**: a POST may have taken effect even if the response was lost.
    */
   async post(query: Record<string, string>, form: Record<string, string>): Promise<string> {
-    const url = `${this.#options.baseUrl}?${new URLSearchParams({ ...query, location: LOCATION })}`;
+    const url = this.url(query);
     const html = await this.#queue.add(async () => {
       let response: Response;
       try {

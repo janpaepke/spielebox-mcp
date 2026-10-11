@@ -3,6 +3,8 @@ import { SpieleboxClient } from "@janpaepke/spielebox-client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import pkg from "../package.json" with { type: "json" };
 import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "./consent/index.ts";
+import { openInBrowser } from "./handoff/open-browser.ts";
+import { HandoffPages } from "./handoff/pages.ts";
 import { createServer } from "./server.ts";
 import { UpdateCheck } from "./updates.ts";
 
@@ -33,4 +35,7 @@ const updates =
             : "Release notes:",
       });
 
-serveStdio(() => createServer(client, { consent, contact, updates }));
+// For clients that can't show a confirmation (e.g. Claude Desktop): the user submits on the catalog's own order form.
+const handoff = { pages: new HandoffPages(), openBrowser: openInBrowser };
+
+serveStdio(() => createServer(client, { consent, contact, updates, handoff }));

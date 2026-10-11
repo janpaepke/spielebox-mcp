@@ -82,7 +82,8 @@ environment variables above. Reservation requests need a client that supports MC
 | `list_filters` | Keywords (e.g. *Kooperationsspiele*, *ausgezeichnet*), player counts, ages and play times for a term. |
 | `list_new_games` | Recently added games. |
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | A list of games for your next reservation request. It lives only in the running server, not on the catalog. |
-| `submit_reservation_request` | Sends the reservation list to the Spielebox, after your confirmation. |
+| `submit_reservation_request` | Sends the reservation list to the Spielebox, after your confirmation (clients with forms, e.g. Claude Code). |
+| `open_order_form` | Opens the Spielebox's order form in your browser with the reservation list on it; you submit it there (e.g. Claude Desktop). |
 
 ## Reservation requests
 
@@ -90,9 +91,12 @@ Reserving is binding for you, so nothing is sent without your explicit confirmat
 
 - **Claude Code** shows a form with the games, your contact details and the wording of the Spielebox's order form. Claude Code
   also asks for permission on every call of this tool.
-- **Claude Desktop** opens a confirmation page in your browser (served locally from your own computer) with the same content.
+- **Claude Desktop** can't show such a form for extensions, so there Claude opens a page in your browser instead. One click
+  puts your games on the Spielebox's Merkliste and opens its **official order form**, where you fill in your details and
+  submit it yourself. Your details from the extension settings are shown with copy buttons.
 
 Before sending, availability is checked again, and the request only goes out if it contains exactly the games you confirmed.
+The Spielebox takes at most 6 games per request.
 A sent request is not yet a booking: the Spielebox staff prepare the games and confirm by e-mail. Their usual rules apply
 (order at least a day before pickup; pick up within a few working days).
 

@@ -68,7 +68,8 @@ export class ConsentGate {
       const channel = this.#channels.find((c) => c.supports(supported));
       if (!channel) {
         return stopped(
-          "This MCP client can't show a confirmation (no elicitation form or URL support), so reservation requests are disabled.",
+          "This MCP client can't show a confirmation (no elicitation form or URL support), so nothing can be sent from here. " +
+            "Use open_order_form instead: it opens the Spielebox's own order form with the games in the user's browser.",
         );
       }
       const prepared = await prepare();

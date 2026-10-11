@@ -137,7 +137,7 @@ reservation request, not a long-term list (see Glossary → wishlist).
 Implementation: `addToReservationList`, `removeFromReservationList`, `clearReservationList`, `getReservationList` on the client.
 Adding resolves each id through `getGames`, so only games the client has seen can be added, and the result shows current
 availability. The locators of listed games are **pinned** outside the LRU, so a long session can't evict them before submission.
-The list holds at most 30 games, only to keep memory bounded; the site's own limit is unknown.
+The list holds at most 6 games, the catalog's limit per reservation request.
 
 ## Reservation request (phase 3, implemented, not yet used for real)
 
@@ -188,11 +188,28 @@ elicitation, the URL flow (page confirmed, declined, not opened, timed out), the
 escaping, a replayed confirmation and a forged state. A live probe ran the form flow against the real catalog with a fetch guard
 that blocks every POST and Merkliste request.
 
+### Handoff to the catalog's own order form (clients without elicitation)
+
+Claude Desktop declares **no elicitation** for local extensions (measured: its per-request capabilities only contain the
+MCP Apps extension), so no consent channel can run there, and `submit_reservation_request` refuses. Instead,
+`open_order_form` hands the reservation list to the user's browser:
+
+- The client plans the steps (`planOrderFormHandoff`): fresh availability check, then the catalog URLs for clear →
+  one search per locator → add each game → order form. It sends nothing itself.
+- The MCP layer serves a local page (`handoff/pages.ts`, 127.0.0.1, one-time ticket) and opens it in the default browser.
+  One click there walks a second tab through the steps, and the user submits the **official** form themselves; the page
+  shows the contact data from the settings with copy buttons, since the form can't be prefilled.
+- Each step waits until the catalog tab actually shows the catalog's page (it becomes unreadable for our page) and then
+  returns the tab to a blank page of our own origin. No fixed delays: about 1–2 s for 4 games, correct on slow
+  connections too. Every step URL is unique per run, because the catalog lets browsers cache some responses for hours.
+- With this path the user, not the server, sends the request, and the server never handles the contact data for it.
+
 ### Clients (verified 2026-10-11)
 
 - **Claude Code** declares form and URL elicitation → form channel.
-- **Claude Desktop** (2.31226.1): its MCP client is created with `capabilities: { elicitation: { url: {} } }` and negotiates
-  protocol 2026-07-28 (read from the installed app bundle) → URL channel. Local MCP servers only run in Desktop chat as a
+- **Claude Desktop** (2.31226.1): for local extensions it sends **no elicitation capability** per request (only
+  `extensions: { "io.modelcontextprotocol/ui": … }`, i.e. MCP Apps), measured from a real call. Clients in its bundle that do
+  declare URL mode serve other features. → `open_order_form` (handoff). Local MCP servers only run in Desktop chat as a
   Desktop Extension (`.mcpb`) or via `claude_desktop_config.json`; plugins with local servers are ignored there.
 - Remote connectors (claude.ai web, mobile) would need a hosted server with authentication and per-user state: not planned.
 

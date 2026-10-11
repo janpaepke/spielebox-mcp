@@ -17,7 +17,7 @@ const DETAILS: Record<string, string> = {
 /** Ids without their own fixture get this stand-in; the parser takes the id from the request anyway. */
 const STAND_IN_DETAIL = "detail-galaxy-trucker.html";
 
-const detailFor = (id: string) => fixture(DETAILS[id] ?? STAND_IN_DETAIL);
+const detailFor = (id: string, standIn = STAND_IN_DETAIL) => fixture(DETAILS[id] ?? standIn);
 const titleOf = (id: string) => /<h1>([^<]+)<\/h1>/.exec(detailFor(id).split('id="details_sb"')[1] ?? "")?.[1] ?? "";
 
 /**
@@ -43,6 +43,8 @@ export class FakeOpac {
   readonly notOrderable = new Set<string>();
   /** Ids whose `basket=add` is silently ignored. */
   readonly ignoreAdds = new Set<string>();
+  /** Detail page for ids without their own fixture (default: a game whose copies are all borrowed). */
+  standInDetail = STAND_IN_DETAIL;
   /** Response to an order POST: "accept", "error" (error box) or "network" (fetch throws). */
   orderOutcome: "accept" | "error" | "network" = "accept";
 
@@ -94,7 +96,7 @@ export class FakeOpac {
       return "";
     }
     if (p.get("orderbasket")) return this.#orderForm(session);
-    if (media) return inSet(media) ? detailFor(media) : fixture("detail-not-in-session.html");
+    if (media) return inSet(media) ? detailFor(media, this.standInDetail) : fixture("detail-not-in-session.html");
     if (p.get("newmedia")) {
       session.term = "new";
       return fixture("new-games.html");

@@ -4,6 +4,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOpac } from "../../client/test/fake-opac.ts";
 import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "../src/consent/index.ts";
+import { HandoffPages } from "../src/handoff/pages.ts";
 import { type CatalogClient, createServer, type ServerOptions } from "../src/server.ts";
 import { UpdateCheck } from "../src/updates.ts";
 
@@ -81,6 +82,7 @@ function stub(overrides: Partial<CatalogClient> = {}): CatalogClient {
     clearReservationList: vi.fn(async () => EMPTY_LIST),
     getReservationList: vi.fn(async () => EMPTY_LIST),
     prepareReservationRequest: vi.fn(async () => EMPTY_LIST),
+    planOrderFormHandoff: vi.fn(async () => ({ items: [], steps: [] })),
     submitReservationRequest: vi.fn(async () => SENT),
     ...overrides,
   };
@@ -410,5 +412,85 @@ describe("submit_reservation_request", () => {
     const unavailable = await connect(stub({ prepareReservationRequest: vi.fn(async () => borrowed) }), { elicit });
     expect(JSON.stringify((await call(unavailable)).content)).toContain("Not available right now: CATAN Connect");
     expect(elicit).not.toHaveBeenCalled();
+  });
+});
+
+describe("open_order_form", () => {
+  let handoffPages: HandoffPages;
+  afterEach(() => handoffPages?.close());
+
+  function withHandoff(catalog: CatalogClient) {
+    handoffPages = new HandoffPages();
+    const opened: string[] = [];
+    const options = {
+      consent: gate(),
+      contact: { firstName: "Erika" },
+      handoff: { pages: handoffPages, openBrowser: (url: string) => void opened.push(url) },
+    };
+    return { options, opened, connect: () => connect(catalog, { options }) };
+  }
+
+  it("is only offered with a handoff, and isn't destructive", async () => {
+    expect((await (await connect(stub())).listTools()).tools.map((t) => t.name)).not.toContain("open_order_form");
+    const { tools } = await (await withHandoff(stub()).connect()).listTools();
+    expect(tools.find((t) => t.name === "open_order_form")?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+    });
+  });
+
+  it("opens a handoff page for the planned steps in the browser", async () => {
+    const plan = {
+      items: [
+        {
+          id: "a".repeat(32),
+          title: "CATAN Connect",
+          availability: "available" as const,
+          availableCopies: 2,
+          onlineReservationRequired: false,
+        },
+      ],
+      steps: [{ kind: "form" as const, url: "https://opac.wienxtra.at/index.php?orderbasket=true&location=sb" }],
+    };
+    const setup = withHandoff(stub({ planOrderFormHandoff: vi.fn(async () => plan) }));
+    const result = await (await setup.connect()).callTool({ name: "open_order_form", arguments: {} });
+    const { url } = result.structuredContent as { url: string };
+    expect(setup.opened).toEqual([url]);
+    const html = await (await fetch(url)).text();
+    expect(html).toContain("<li>CATAN Connect</li>");
+    expect(html).toContain('data-copy="Erika"');
+  });
+
+  it("reports catalog refusals as tool errors and opens nothing", async () => {
+    const setup = withHandoff(
+      stub({ planOrderFormHandoff: async () => Promise.reject(new SpieleboxError("RESERVATION_LIST_EMPTY", "empty")) }),
+    );
+    const result = await (await setup.connect()).callTool({ name: "open_order_form", arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(setup.opened).toEqual([]);
+  });
+
+  it("is where submit_reservation_request points clients without confirmations", async () => {
+    const result = await (await withHandoff(stub()).connect()).callTool({
+      name: "submit_reservation_request",
+      arguments: {},
+    });
+    expect(JSON.stringify(result.content)).toContain("open_order_form");
+  });
+
+  it("plans against the fake catalog end to end", async () => {
+    const opac = new FakeOpac();
+    const setup = withHandoff(new SpieleboxClient({ fetch: opac.fetch, minIntervalMs: 0 }));
+    const mcp = await setup.connect();
+    const search = await mcp.callTool({ name: "search_games", arguments: { term: "catan connect" } });
+    const [game] = (search.structuredContent as SearchResult).games;
+    await mcp.callTool({ name: "reservation_list_add", arguments: { ids: [game?.id] } });
+    const opened = await mcp.callTool({ name: "open_order_form", arguments: {} });
+    const html = await (await fetch((opened.structuredContent as { url: string }).url)).text();
+    expect(html).toContain("deletebasket=1");
+    expect(html).toContain(`basket=add&media=${game?.id}`);
+    expect(
+      opac.log.some((l) => l.startsWith("basket=") || l.startsWith("orderbasket") || l.startsWith("deletebasket")),
+    ).toBe(false);
   });
 });

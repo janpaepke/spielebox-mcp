@@ -86,6 +86,15 @@ submission creates a binding pre-order.
 - `basket=add` only works if the id is in the session's **current search result set** (same binding as detail pages).
   A blind add in a fresh session is silently ignored.
 - **No server-side dedupe:** adding the same id twice counts it twice ⇒ the client must dedupe.
+- **At most 6 games per reservation request** (verified 2026-10-11): with more on the Merkliste, `orderbasket` shows
+  "Sie haben für den Standort spielebox zu viele Medien auf der Merkliste. Maximal können 6 Medien für diesen Standort
+  vorbestellt werden." instead of the form.
+- `deletebasket` only clears with a **numeric** value (the site sends `Math.random()`); `deletebasket=zz71` is ignored.
+  Its response is `cache-control: private, max-age=10800`, so a browser serves repeated identical URLs from cache for 3 h
+  without asking the server ⇒ browsers need a unique URL per request (the site's own scripts do this). An extra `_=…`
+  parameter is ignored by the catalog.
+- **Requests of one session are processed strictly in order** (PHP session locking): a 60 ms request sent while a 1.3 s
+  search runs finishes only after it. Requests the client cancels still take effect.
 - `basketinfo` → small HTML snippet ("N Medien auf der Merkliste" + links), empty string when the basket is empty.
 - `showbasket=true` → the basket rendered as a normal result list (with facets). Does **not** seed the detail result set.
 - `deletebasket=<any>` clears the basket.
@@ -122,6 +131,14 @@ After POST the page showed a success message saying a confirmation would follow.
 markup and wording are not recorded.
 
 **Still unknown:** the exact success markup, validation error pages, and whether items that can't be pre-ordered block the order.
+
+### Handing the Merkliste to the user's browser (verified 2026-10-11)
+
+- The session id is **only accepted as a cookie** (`?wienXtraopac=`, `?PHPSESSID=`, `?sid=`, `?session=` are ignored), and
+  the order form ignores `?firstname=…` etc. A prefilled order link is therefore impossible.
+- A page on another origin can't set the catalog's cookie or read its pages, but it can walk a tab through plain top-level
+  page loads (clear → search → add → `orderbasket`): the browser then gets its own catalog session with exactly those
+  games, ending on the official order form. Tested in Chromium with fresh, existing and over-full sessions.
 Capture these on the first real order made through the client.
 
 Site rules (home page): order at least one day before pickup; pick up within 3 working days.

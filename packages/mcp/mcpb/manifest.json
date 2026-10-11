@@ -72,6 +72,10 @@
     {
       "name": "submit_reservation_request",
       "description": "Send the reservation list as a binding request, after your confirmation"
+    },
+    {
+      "name": "open_order_form",
+      "description": "Open the Spielebox's order form in your browser with the reservation list on it; you submit it there"
     }
   ],
   "user_config": {

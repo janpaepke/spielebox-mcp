@@ -9,9 +9,10 @@ export type OrderForm = {
 
 /** Parses the order form (`index.php?orderbasket=true`). Throws OpacMessageError for the error box (e.g. empty Merkliste). */
 export function parseOrderForm($: Page): OrderForm {
-  const message = readMessage($);
-  if (message?.kind === "error") throw new OpacMessageError(message.text);
   const form = $("form[method='post']").first();
+  // Without the form, the page explains why (e.g. empty Merkliste, more than 6 games).
+  const message = readMessage($);
+  if (message && !form.find("input[name='order']").length) throw new OpacMessageError(message.text);
   const token = form.find("input[name='order']").attr("value");
   if (!token || !form.find("input[name='firstname']").length) throw new MarkupChangedError("order form");
   const items = form

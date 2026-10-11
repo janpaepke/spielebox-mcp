@@ -17,6 +17,8 @@ import {
   type GetGamesParams,
   GetGamesParams as GetGamesParamsSchema,
   type GetGamesResult,
+  type HandoffPlan,
+  type HandoffStep,
   type NewGamesParams,
   NewGamesParams as NewGamesParamsSchema,
   type ReservationList,
@@ -50,8 +52,12 @@ const DAY_MS = 24 * 60 * 60_000;
 const resultSetKey = (locator: Locator, keywordId = "") =>
   locator.kind === "new" ? "new" : `search:${locator.term}|${keywordId}`;
 
-/** Upper bound for the reservation list; only there to keep memory bounded. */
-export const RESERVATION_LIST_MAX = 30;
+/** The plain search that puts a locator's games into the session's result set. */
+const locatorQuery = (locator: Locator): Query =>
+  locator.kind === "new" ? { newmedia: "true", newsearch: "true" } : { newsearch: "true", sword: locator.term };
+
+/** The catalog accepts at most 6 games per reservation request ("Maximal können 6 Medien … vorbestellt werden"). */
+export const RESERVATION_LIST_MAX = 6;
 
 /**
  * Client for the WIENXTRA-Spielebox online catalog.
@@ -160,7 +166,7 @@ export class SpieleboxClient {
       if (this.#reservationList.size + fresh.length > RESERVATION_LIST_MAX) {
         throw new SpieleboxError(
           "RESERVATION_LIST_FULL",
-          `The reservation list holds at most ${RESERVATION_LIST_MAX} games`,
+          `The Spielebox takes at most ${RESERVATION_LIST_MAX} games per reservation request`,
         );
       }
       const { games, notFound } = await this.#getGames(fresh);
@@ -207,6 +213,38 @@ export class SpieleboxClient {
       this.#http.dropIdleSession();
       for (const id of this.#reservationList) this.#details.delete(id);
       return this.#describeReservationList([]);
+    });
+  }
+
+  /**
+   * Plans the handoff of the reservation list to the user's browser: the catalog pages the browser has to load so that
+   * its own Merkliste holds exactly these games and it ends on the catalog's order form. The user then submits the
+   * request there, on the official site; nothing is sent by the client. Availability is checked fresh first.
+   */
+  async planOrderFormHandoff(): Promise<HandoffPlan> {
+    return this.#lock.run(async () => {
+      this.#http.dropIdleSession();
+      const ids = [...this.#reservationList];
+      if (!ids.length) throw new SpieleboxError("RESERVATION_LIST_EMPTY", "The reservation list is empty");
+      for (const id of ids) this.#details.delete(id);
+      const list = await this.#describeReservationList([]);
+      if (list.notFound.length) {
+        throw new SpieleboxError("NOT_FOUND", `Games not found anymore: ${list.notFound.map((n) => n.id).join(", ")}`);
+      }
+      const unavailable = list.items.filter((i) => i.availability !== "available").map((i) => i.title);
+      if (unavailable.length)
+        throw new SpieleboxError("NOT_AVAILABLE", `Not available right now: ${unavailable.join(", ")}`);
+
+      const { groups, unknown } = this.#groupByLocator(ids);
+      if (unknown.length) throw new SpieleboxError("NOT_FOUND", `Unknown games: ${unknown.join(", ")}`);
+      // Start from an empty Merkliste, so the order form lists exactly the reservation list.
+      const steps: HandoffStep[] = [{ kind: "clear", url: this.#http.url({ deletebasket: "1" }) }];
+      for (const { locator, ids: groupIds } of groups) {
+        steps.push({ kind: "search", url: this.#http.url(locatorQuery(locator)) });
+        for (const id of groupIds) steps.push({ kind: "add", url: this.#http.url({ basket: "add", media: id }) });
+      }
+      steps.push({ kind: "form", url: this.#http.url({ orderbasket: "true" }) });
+      return { items: list.items, steps };
     });
   }
 
@@ -474,14 +512,8 @@ export class SpieleboxClient {
 
   /** Runs the plain search a locator stands for, making its games the session's result set. */
   async #enterLocatorResultSet(locator: Locator): Promise<void> {
-    const query: Query =
-      locator.kind === "new" ? { newmedia: "true", newsearch: "true" } : { newsearch: "true", sword: locator.term };
-    await this.#fetchResults(
-      query,
-      resultSetKey(locator),
-      locator,
-      locator.kind === "new" ? "neue Medien" : locator.term,
-    );
+    const term = locator.kind === "new" ? "neue Medien" : locator.term;
+    await this.#fetchResults(locatorQuery(locator), resultSetKey(locator), locator, term);
   }
 
   async #fetchDetail(id: string): Promise<GameDetails | null> {

@@ -6,6 +6,7 @@ import {
   NewGamesParams,
   ReservationList,
   ReservationListChange,
+  ReservationListItem,
   ReservationRequestResult,
   SearchParams,
   SearchResult,
@@ -16,6 +17,7 @@ import { type CallToolResult, type InputRequiredResult, McpServer } from "@model
 import * as z from "zod";
 import pkg from "../package.json" with { type: "json" };
 import { type ConsentGate, elicitationModes } from "./consent/gate.ts";
+import type { HandoffPages } from "./handoff/pages.ts";
 import type { UpdateCheck } from "./updates.ts";
 
 /** The client methods the server relays to. */
@@ -31,6 +33,7 @@ export type CatalogClient = Pick<
   | "getReservationList"
   | "prepareReservationRequest"
   | "submitReservationRequest"
+  | "planOrderFormHandoff"
 >;
 
 export type ServerOptions = {
@@ -43,6 +46,11 @@ export type ServerOptions = {
   contact?: Partial<Contact>;
   /** Tells the user once per process when a newer release exists. Must be shared by all server instances. */
   updates?: UpdateCheck;
+  /**
+   * Hands the reservation list over to the user's browser, ending on the catalog's own order form. Must be shared by
+   * all server instances. Without it, `open_order_form` isn't offered.
+   */
+  handoff?: { pages: HandoffPages; openBrowser: (url: string) => void };
 };
 
 const INSTRUCTIONS = `Unofficial tools (not affiliated with WIENXTRA) for the WIENXTRA-Spielebox in Vienna, Austria's largest board game library (~9000 games, lent for free or a small fee).
@@ -53,11 +61,20 @@ Catalog data is German. Typical flow: search_games (or list_new_games) → get_g
 - onlineReservationRequired: the game must be reserved online before pickup.
 - The reservation list stages games for a reservation request (the catalog's "Merkliste"); it lives in this server's memory.
 - If a tool result contains an "Update available" note, pass it on to the user once.
-- submit_reservation_request sends the list to the Spielebox. It is binding for the user, so it always asks the user to confirm (in a form, or on a page in the browser); never call it without the user asking for it. Success means "request sent": the staff confirm by e-mail when the games are ready.`;
+- To reserve, call submit_reservation_request: it asks the user to confirm and sends the list (binding for the user; only when the user asks for it). If it reports that this client can't show a confirmation, call open_order_form instead: it opens the Spielebox's official order form in the user's browser with the games on it, and the user submits it there. Either way, the staff confirm by e-mail when the games are ready.`;
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 /** Changes only the in-memory reservation list, never the catalog. */
 const LOCAL_CHANGE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+
+/** Result of open_order_form. */
+const OrderFormOpened = z.object({
+  url: z
+    .string()
+    .describe("Local page that hands the list over to the catalog's order form; give it to the user if it didn't open"),
+  items: z.array(ReservationListItem),
+  note: z.string(),
+});
 
 /** Result of submit_reservation_request: either the request was sent, or why nothing was sent. */
 const SubmitOutcome = z.object({
@@ -68,7 +85,7 @@ const SubmitOutcome = z.object({
 
 /** Builds the MCP server. Each tool validates with the client's schemas and relays to one client method. */
 export function createServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
-  const { consent, contact = {}, updates } = options;
+  const { consent, contact = {}, updates, handoff } = options;
 
   /** Relays a client call; the first call also starts the update check, and a pending update notice rides along once. */
   const relay = async <T extends Record<string, unknown>>(call: () => Promise<T>): Promise<CallToolResult> => {
@@ -180,6 +197,38 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
     () => relay(() => client.clearReservationList()),
   );
 
+  if (handoff) {
+    server.registerTool(
+      "open_order_form",
+      {
+        title: "Open order form",
+        description:
+          "Open the Spielebox's official order form in the user's browser with the reservation list on it. One click there " +
+          "fills the catalog's Merkliste; the user then submits the form themselves. Nothing is sent by this tool.",
+        inputSchema: z.object({}),
+        outputSchema: OrderFormOpened,
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      () =>
+        relay(async () => {
+          const plan = await client.planOrderFormHandoff();
+          const url = await handoff.pages.create({
+            titles: plan.items.map((i) => i.title),
+            steps: plan.steps,
+            contact,
+          });
+          handoff.openBrowser(url);
+          return {
+            url,
+            items: plan.items,
+            note:
+              "A page opened in the user's browser (link above if it didn't). One click there puts the games on the " +
+              "Spielebox's Merkliste and opens its order form; the user submits it there. Nothing has been sent yet.",
+          };
+        }),
+    );
+  }
+
   if (!consent) return server;
 
   server.registerTool(
@@ -197,6 +246,9 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
     },
     async (_args, ctx): Promise<CallToolResult | InputRequiredResult> => {
       const supported = elicitationModes(ctx, server.server.getClientCapabilities());
+      // Which confirmation the client supports decides the route; logged (stderr → the client's MCP log) because
+      // clients don't always support what their documentation suggests.
+      console.error(`[spielebox] submit_reservation_request: elicitation ${JSON.stringify(supported)}`);
       const round = await consent.run(ctx, supported, async () => {
         let list: ReservationList;
         try {

@@ -220,11 +220,10 @@ describe("reservation list", () => {
     expect(opac.log.at(-1)).toBe(`media=${CONNECT}`);
   });
 
-  it("refuses to grow beyond its limit", async () => {
-    await client.search({ term: "catan", limit: 100 });
-    const ids = (await client.search({ term: "catan", limit: 31 })).games.map((g) => g.id);
-    await expect(client.addToReservationList({ ids: ids.slice(0, 20) })).resolves.toBeDefined();
-    await expect(client.addToReservationList({ ids: ids.slice(20, 31) })).rejects.toMatchObject({
+  it("refuses to grow beyond the catalog's limit of 6 games", async () => {
+    const ids = (await client.search({ term: "catan", limit: 7 })).games.map((g) => g.id);
+    await expect(client.addToReservationList({ ids: ids.slice(0, 6) })).resolves.toBeDefined();
+    await expect(client.addToReservationList({ ids: ids.slice(6, 7) })).rejects.toMatchObject({
       code: "RESERVATION_LIST_FULL",
     });
   });
@@ -340,5 +339,53 @@ describe("reservation request", () => {
       code: "RESERVATION_LIST_EMPTY",
     });
     expect(opac.log).toEqual([]);
+  });
+});
+
+describe("planOrderFormHandoff", () => {
+  const url = (params: string) => `https://opac.wienxtra.at/index.php?${params}&location=sb`;
+
+  it("plans clear → one search per group → adds → order form, without touching the Merkliste itself", async () => {
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [CONNECT, MENSCHHEIT] });
+    opac.requests.length = 0;
+    const plan = await client.planOrderFormHandoff();
+    expect(plan.items.map((i) => i.title)).toEqual(["CATAN Connect", "ABENTEUER MENSCHHEIT"]);
+    expect(plan.steps).toEqual([
+      { kind: "clear", url: url("deletebasket=1") },
+      { kind: "search", url: url("newsearch=true&sword=catan") },
+      { kind: "add", url: url(`basket=add&media=${CONNECT}`) },
+      { kind: "add", url: url(`basket=add&media=${MENSCHHEIT}`) },
+      { kind: "form", url: url("orderbasket=true") },
+    ]);
+    // Only fresh availability was read; nothing was put on a Merkliste.
+    expect(opac.log.every((l) => l.startsWith("media=") || l.startsWith("newsearch="))).toBe(true);
+  });
+
+  it("uses one search per locator", async () => {
+    opac.standInDetail = "detail-catan-connect.html"; // games without a fixture count as available
+    const fresh = (await client.newGames({ limit: 1 })).games[0]?.id ?? "";
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [MENSCHHEIT, fresh] });
+    const steps = (await client.planOrderFormHandoff()).steps;
+    expect(steps.map((s) => s.kind)).toEqual(["clear", "search", "add", "search", "add", "form"]);
+    expect(steps[1]?.url).toContain("sword=catan&");
+    expect(steps[3]?.url).toContain("newmedia=true");
+  });
+
+  it("shares one search between games that the same search found", async () => {
+    await client.search({ term: "catan connect" });
+    await client.search({ term: "catan" });
+    await client.addToReservationList({ ids: [CONNECT, MENSCHHEIT] });
+    expect((await client.planOrderFormHandoff()).steps.filter((s) => s.kind === "search")).toHaveLength(1);
+  });
+
+  it("refuses an empty list and unavailable games", async () => {
+    await expect(client.planOrderFormHandoff()).rejects.toMatchObject({ code: "RESERVATION_LIST_EMPTY" });
+    const borrowed = (await client.search({ term: "catan", limit: 30 })).games.find(
+      (g) => g.id !== CONNECT && g.id !== MENSCHHEIT,
+    );
+    await client.addToReservationList({ ids: [borrowed?.id ?? ""] }); // stand-in detail page: all copies borrowed
+    await expect(client.planOrderFormHandoff()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
   });
 });

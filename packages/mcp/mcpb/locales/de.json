@@ -39,6 +39,10 @@
     {
       "name": "submit_reservation_request",
       "description": "Reservierungsliste als verbindliche Reservierungsanfrage senden, nach deiner Bestätigung"
+    },
+    {
+      "name": "open_order_form",
+      "description": "Das Bestellformular der Spielebox mit deiner Reservierungsliste im Browser öffnen; du schickst es dort selbst ab"
     }
   ]
 }
