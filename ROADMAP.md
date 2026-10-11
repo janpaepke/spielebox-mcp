@@ -4,7 +4,6 @@ Rough plan, not a promise. Main target: **Claude Desktop**.
 
 ## Next
 
-- **First release (0.4.0):** `.mcpb` attached to a GitHub release.
 - **First real reservation request** as a deliberate test, to record the catalog's success page and tighten how the response is
   checked (today it's only tested against a stand-in).
 

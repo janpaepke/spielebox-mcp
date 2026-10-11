@@ -1,7 +1,7 @@
 # Architecture
 
-Status: **v0.1–v0.3 implemented, plus consent channels and the Claude Desktop extension** (2026-10-11). The reservation request is
-tested against a fake catalog only; the first real submission is still pending. This doc builds on
+Status: **1.0** (2026-10-11). Everything below is implemented. The direct reservation request (`submit_reservation_request`) is
+tested against a fake catalog only; its first real submission is still pending. This doc builds on
 [opac-research.md](opac-research.md), research into existing library/catalog MCP servers, MCP best practices and client stacks.
 Open decisions are marked **[decide]** (none at the moment).
 
@@ -62,7 +62,7 @@ packages/mcp
 
 Parsers never fetch, and the transport never parses. When a schema check fails, the client throws `MarkupChangedError`. That error is the alarm for when the site's markup changes.
 
-## Client surface (v0.1, implemented)
+## Client surface
 
 `SpieleboxClient` (all methods async, all inputs validated with the exported zod schemas):
 
@@ -117,6 +117,8 @@ In memory only, bounded, no persistent cache. HTTP caching is useless here becau
 | `list_filters` | 1 | readOnly, openWorld |
 | `list_new_games` | 1 | readOnly, openWorld |
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | 2 | not readOnly, not destructive, idempotent |
+| `open_game_page` | 1 | readOnly, openWorld; opens a local handoff page in the browser |
+| `open_order_form` | 3 | not readOnly, not destructive, idempotent, openWorld; opens a local handoff page in the browser, the user submits |
 | `submit_reservation_request` | 3 | destructive, not idempotent, `_meta["anthropic/requiresUserInteraction"]: true`; output `{ sent, reason?, request? }` |
 
 Each tool takes the client's schema as `inputSchema` and `outputSchema` and relays to one client method. Results come back as
@@ -124,7 +126,7 @@ Each tool takes the client's schema as `inputSchema` and `outputSchema` and rela
 the error code, so the model can react. Server instructions explain the search semantics. Tool descriptions stay under 2,048 characters,
 which is where Claude Code truncates them.
 
-## Reservation list (phase 2, implemented)
+## Reservation list
 
 On the site, the Merkliste lives **server-side in the PHP session**. The browser only holds the session cookie, and the list is gone
 after 24 minutes idle. This was verified with curl, which has no browser storage: the list survived across requests through the cookie alone.
@@ -139,7 +141,7 @@ Adding resolves each id through `getGames`, so only games the client has seen ca
 availability. The locators of listed games are **pinned** outside the LRU, so a long session can't evict them before submission.
 The list holds at most 6 games, the catalog's limit per reservation request.
 
-## Reservation request (phase 3, implemented, not yet used for real)
+## Reservation request (not yet used for real)
 
 The order is a binding request that the staff process by hand by e-mail. A successful submit means "request sent", not "reserved".
 The tool says exactly that.
@@ -170,7 +172,7 @@ Consent is a separate layer between the tool and the client UI:
 - **Channels** (`consent/*.ts`) only present and collect:
   - **form**: an elicitation form in the client (Claude Code): exact titles, pickup note, the order form's checkbox wording
     verbatim, a required confirm box, contact fields prefilled from config and editable.
-  - **url**: for clients with URL-mode elicitation only (**Claude Desktop**, see below). A local confirmation page with the same
+  - **url**: for clients that offer only URL-mode elicitation (none known yet; Claude Desktop offers none, see below). A local confirmation page with the same
     content on `127.0.0.1` (random port, one-time ticket in the path, no personal data in the URL, Host and Origin checks, escaped
     content, strict CSP). The client asks the user to open it; round 2 then waits (up to 4 min) for the page's answer, which is the
     flow the spec describes for URL mode.
@@ -261,6 +263,8 @@ A script refreshes the fixtures from the live site and trims them.
 
 ## Iterations
 
-1. **v0.1:** client read-only + MCP read tools + tests.
-2. **v0.2:** reservation list.
-3. **v0.3:** reservation request with consent. The first real order is a deliberate, user-approved test that records the success page.
+1. **0.1:** client read-only + MCP read tools + tests.
+2. **0.2:** reservation list.
+3. **0.3:** reservation request with consent (form and URL channels).
+4. **0.4–0.6:** Claude Desktop extension, release pipeline, update notice, handoff to the catalog's order form and detail pages.
+5. **1.0:** first stable release. What's next: [ROADMAP.md](../ROADMAP.md).

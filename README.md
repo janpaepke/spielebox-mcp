@@ -38,7 +38,8 @@ installed from a file. An extension can't avoid it, and there is no way for it t
 does:
 
 - It connects only to the catalog (`opac.wienxtra.at`) and, for the update check, to `api.github.com` (can be turned off).
-- For reservation confirmations it serves a page on your own computer (`127.0.0.1`) that only you can open.
+- To open catalog pages in your browser (order form, game pages) it serves a small page on your own computer (`127.0.0.1`)
+  that only you can open.
 - It doesn't read or write your files.
 
 The code is open, and releases are built from this repository by GitHub Actions; you can verify a download with
@@ -46,8 +47,8 @@ The code is open, and releases are built from this repository by GitHub Actions;
 
 **Deutsch:** Claude Desktop zeigt diese Warnung bei **jeder** Erweiterung, die aus einer Datei installiert wird; eine Erweiterung
 kann das nicht verhindern und auch keine geringeren Rechte anfordern. Diese Erweiterung verbindet sich nur mit dem Katalog
-(`opac.wienxtra.at`) und für die Update-Prüfung mit `api.github.com` (abschaltbar), zeigt Bestätigungen für Reservierungen auf einer
-Seite auf deinem eigenen Rechner (`127.0.0.1`) an und liest oder schreibt keine Dateien. Der Code ist offen, Releases werden von
+(`opac.wienxtra.at`) und für die Update-Prüfung mit `api.github.com` (abschaltbar), öffnet Katalogseiten (Bestellformular,
+Spieleseiten) über eine kleine Seite auf deinem eigenen Rechner (`127.0.0.1`) und liest oder schreibt keine Dateien. Der Code ist offen, Releases werden von
 GitHub Actions aus diesem Repository gebaut und lassen sich mit `gh attestation verify` prüfen.
 
 </details>
@@ -69,7 +70,8 @@ The `SPIELEBOX_*` variables are optional.
 ### Other MCP clients
 
 Any MCP client that runs local (stdio) servers works: run `node packages/mcp/dist/index.mjs`, optionally with the `SPIELEBOX_*`
-environment variables above. Reservation requests need a client that supports MCP elicitation (form or URL mode).
+environment variables above. Sending a reservation request directly needs a client that supports MCP elicitation (form or URL mode); otherwise
+`open_order_form` hands it to the catalog's order form in your browser.
 
 ## Tools
 
