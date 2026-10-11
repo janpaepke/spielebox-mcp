@@ -1,7 +1,7 @@
 {
   "display_name": "Spielebox (inoffiziell)",
   "description": "Inoffiziell: Spiele der WIENXTRA-Spielebox in Wien suchen, Verfügbarkeit prüfen und Reservierungsanfragen senden. Keine Verbindung zu WIENXTRA.",
-  "long_description": "Inoffizielles, unabhängiges Werkzeug für den Online-Katalog der WIENXTRA-Spielebox (opac.wienxtra.at), Österreichs größter Ludothek. Keine Verbindung zu WIENXTRA, nicht von WIENXTRA unterstützt oder autorisiert. Durchsuche rund 9000 Spiele mit Filtern für Spieler·innenzahl, Alter und Spieldauer, sieh die Verfügbarkeit jedes Exemplars, sammle Spiele auf einer Reservierungsliste und schicke sie als Reservierungsanfrage ab. Jede Anfrage bestätigst du selbst, in einem Formular oder auf einer Seite im Browser; deine Kontaktdaten werden nur zum Vorausfüllen dieser Bestätigung verwendet und nur an die Spielebox gesendet.",
+  "long_description": "Inoffizielles, unabhängiges Werkzeug für den Online-Katalog der WIENXTRA-Spielebox (opac.wienxtra.at), Österreichs größter Ludothek. Keine Verbindung zu WIENXTRA, nicht von WIENXTRA unterstützt oder autorisiert. Durchsuche rund 9000 Spiele mit Filtern für Spieler·innenzahl, Alter und Spieldauer, sieh die Verfügbarkeit jedes Exemplars, sammle Spiele auf einer Reservierungsliste und schicke sie als Reservierungsanfrage ab. Jede Reservierung schickst du selbst über das offizielle Bestellformular der Spielebox ab; die Erweiterung speichert keine persönlichen Daten.",
   "keywords": ["Brettspiele", "Spieleverleih", "Ludothek", "Wien", "wienxtra", "spielebox"],
   "tools": [
     {

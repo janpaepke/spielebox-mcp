@@ -458,7 +458,7 @@ describe("open_order_form", () => {
     expect(setup.opened).toEqual([url]);
     const html = await (await fetch(url)).text();
     expect(html).toContain("<li>CATAN Connect</li>");
-    expect(html).toContain('data-copy="Erika"');
+    expect(html).not.toContain("Erika");
   });
 
   it("reports catalog refusals as tool errors and opens nothing", async () => {

@@ -24,9 +24,6 @@ can collect games on a reservation list. Reserving always asks you first (see [R
 
 1. Download `spielebox.mcpb` from the [latest release](https://github.com/janpaepke/spielebox-mcp/releases/latest).
 2. Double-click it, or drag it into Claude Desktop (*Settings → Extensions*), and confirm the installation.
-3. Optional: enter your name, e-mail and phone in the extension's settings. They only prefill the confirmation of reservation
-   requests.
-
 Updates: when a new version is out, the assistant tells you once in the chat. Download the new `spielebox.mcpb` and double-click
 it again.
 
@@ -92,8 +89,8 @@ Reserving is binding for you, so nothing is sent without your explicit confirmat
 - **Claude Code** shows a form with the games, your contact details and the wording of the Spielebox's order form. Claude Code
   also asks for permission on every call of this tool.
 - **Claude Desktop** can't show such a form for extensions, so there Claude opens a page in your browser instead. One click
-  puts your games on the Spielebox's Merkliste and opens its **official order form**, where you fill in your details and
-  submit it yourself. Your details from the extension settings are shown with copy buttons.
+  puts your games on the Spielebox's Merkliste and opens its **official order form**, where you fill in your details (your
+  browser can usually autofill them) and submit it yourself.
 
 Before sending, availability is checked again, and the request only goes out if it contains exactly the games you confirmed.
 The Spielebox takes at most 6 games per request.
@@ -122,9 +119,10 @@ and the software may stop working at any time, for example when the catalogue we
 only after you explicitly confirm it, goes directly to the Spielebox, and only becomes a reservation once the Spielebox confirms
 it. Warranty and liability are governed by the [license](LICENSE) to the extent permitted by law.
 
-**Privacy.** The software runs locally on your computer. Your contact details are stored only in your local configuration and are
-sent directly to WIENXTRA only when you confirm a reservation request; WIENXTRA's [privacy policy](https://wienxtra.at/datenschutz)
-applies to that data. The developer receives no data. Search queries and results, and contact details entered in your AI
+**Privacy.** The software runs locally on your computer. The Claude Desktop extension stores no personal data: you enter your
+contact details on the Spielebox's own order form. In clients with confirmation forms (e.g. Claude Code) you can optionally keep
+them in your local configuration to prefill the form; they are sent directly to WIENXTRA only when you confirm a reservation
+request. WIENXTRA's [privacy policy](https://wienxtra.at/datenschutz) applies to data you send to it. The developer receives no data. Search queries and results, and contact details entered in your AI
 assistant's confirmation form, pass through your AI assistant and are subject to its provider's terms. To tell you about new
 versions, the software asks GitHub once per start (at the first use) for the latest release; GitHub sees your IP address, nothing
 else is sent. You can turn this off in the extension's settings („Nach Updates suchen“).
@@ -145,8 +143,10 @@ Reservierungsanfrage wird nur nach Ihrer ausdrücklichen Bestätigung gesendet, 
 Reservierung, wenn die Spielebox sie bestätigt. Gewährleistung und Haftung richten sich nach der [Lizenz](LICENSE), soweit
 gesetzlich zulässig.
 
-**Datenschutz.** Das Programm läuft lokal auf Ihrem Rechner. Ihre Kontaktdaten werden nur in Ihrer lokalen Konfiguration
-gespeichert und nur bei einer von Ihnen bestätigten Reservierungsanfrage direkt an WIENXTRA übermittelt; für diese Daten gilt die
+**Datenschutz.** Das Programm läuft lokal auf Ihrem Rechner. Die Erweiterung für Claude Desktop speichert keine persönlichen
+Daten: Ihre Kontaktdaten geben Sie im Bestellformular der Spielebox selbst ein. In Clients mit Bestätigungsformular (z. B. Claude
+Code) können Sie sie optional in Ihrer lokalen Konfiguration hinterlegen, um das Formular vorauszufüllen; übermittelt werden sie
+nur bei einer von Ihnen bestätigten Reservierungsanfrage direkt an WIENXTRA. Für Daten, die Sie an WIENXTRA senden, gilt die
 [Datenschutzerklärung von WIENXTRA](https://wienxtra.at/datenschutz). Der Entwickler erhält keine Daten. Suchanfragen und
 Ergebnisse sowie Kontaktdaten, die Sie im Bestätigungsformular Ihres KI-Assistenten eingeben, laufen über Ihren KI-Assistenten und
 unterliegen den Bedingungen von dessen Anbieter. Um Sie über neue Versionen zu informieren, fragt das Programm einmal pro Start (bei

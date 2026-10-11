@@ -3,12 +3,11 @@ import { SpieleboxClient } from "@janpaepke/spielebox-client";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import pkg from "../package.json" with { type: "json" };
 import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "./consent/index.ts";
+import { env } from "./env.ts";
 import { openInBrowser } from "./handoff/open-browser.ts";
 import { HandoffPages } from "./handoff/pages.ts";
 import { createServer } from "./server.ts";
 import { UpdateCheck } from "./updates.ts";
-
-const env = (name: string) => process.env[name] || undefined;
 
 // Shared by all server instances: the SDK may build one per request, while the client and consent flows span several.
 const client = new SpieleboxClient();

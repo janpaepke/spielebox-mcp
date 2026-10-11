@@ -215,7 +215,6 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
           const url = await handoff.pages.create({
             titles: plan.items.map((i) => i.title),
             steps: plan.steps,
-            contact,
           });
           handoff.openBrowser(url);
           return {

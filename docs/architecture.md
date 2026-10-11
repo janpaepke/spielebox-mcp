@@ -197,12 +197,14 @@ MCP Apps extension), so no consent channel can run there, and `submit_reservatio
 - The client plans the steps (`planOrderFormHandoff`): fresh availability check, then the catalog URLs for clear →
   one search per locator → add each game → order form. It sends nothing itself.
 - The MCP layer serves a local page (`handoff/pages.ts`, 127.0.0.1, one-time ticket) and opens it in the default browser.
-  One click there walks a second tab through the steps, and the user submits the **official** form themselves; the page
-  shows the contact data from the settings with copy buttons, since the form can't be prefilled.
+  One click there walks a second tab through the steps, and the user submits the **official** form themselves (the form
+  can't be prefilled; browser autofill usually covers name and e-mail).
 - Each step waits until the catalog tab actually shows the catalog's page (it becomes unreadable for our page) and then
   returns the tab to a blank page of our own origin. No fixed delays: about 1–2 s for 4 games, correct on slow
   connections too. Every step URL is unique per run, because the catalog lets browsers cache some responses for hours.
-- With this path the user, not the server, sends the request, and the server never handles the contact data for it.
+- With this path the user, not the server, sends the request, and the server never handles contact data. The Desktop
+  extension therefore has no contact settings at all; only `check_updates` remains in its `user_config`.
+- Claude Desktop passes the literal `${user_config.x}` for optional settings left empty; the server treats those as unset.
 
 ### Clients (verified 2026-10-11)
 
@@ -233,8 +235,8 @@ A script refreshes the fixtures from the live site and trims them.
 ## Packaging
 
 - **Claude Desktop:** `.mcpb` Desktop Extension (`pnpm --filter spielebox-mcp pack:mcpb`). tsdown builds a second, self-contained
-  bundle (all dependencies inlined, no `node_modules`); the manifest (spec 0.3) maps `user_config` (first name, last name,
-  e-mail, phone) to the `SPIELEBOX_*` env vars. Desktop runs it with its built-in Node.
+  bundle (all dependencies inlined, no `node_modules`); the manifest (spec 0.3) maps `user_config.check_updates` to
+  `SPIELEBOX_CHECK_UPDATES`. Desktop runs it with its built-in Node.
 - **Claude Code and other clients:** `node packages/mcp/dist/index.mjs` with the same env vars.
 - **Updates:** manually installed `.mcpb` files don't update themselves (directory extensions would, but the directory no longer
   takes `.mcpb` submissions). The MCP layer (`updates.ts`, distribution concern, not in the client) asks GitHub for the latest

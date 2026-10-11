@@ -1,13 +1,11 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Contact, HandoffStep } from "@janpaepke/spielebox-client";
+import type { HandoffStep } from "@janpaepke/spielebox-client";
 import { closeLocalServer, escapeHtml, type LocalServer, page, send, startLocalServer } from "../web/local.ts";
 
 export type Handoff = {
   titles: string[];
   steps: HandoffStep[];
-  /** Shown with copy buttons, since the catalog's own form can't be prefilled. */
-  contact: Partial<Contact>;
 };
 
 /**
@@ -64,23 +62,7 @@ export class HandoffPages {
   }
 }
 
-const CONTACT_LABELS: [keyof Contact, string][] = [
-  ["firstName", "Vorname"],
-  ["lastName", "Nachname"],
-  ["email", "E-Mail"],
-  ["phone", "Telefon"],
-];
-
 function handoffPage(handoff: Handoff, nonce: string): string {
-  const contact = CONTACT_LABELS.filter(([key]) => handoff.contact[key]);
-  const contactBlock = contact.length
-    ? `<p>Deine Angaben aus den Einstellungen, zum Einfügen ins Formular:</p><div class="contact">${contact
-        .map(
-          ([key, label]) =>
-            `<span>${label}</span><code>${escapeHtml(handoff.contact[key] ?? "")}</code><button class="small" type="button" data-copy="${escapeHtml(handoff.contact[key] ?? "")}">Kopieren</button>`,
-        )
-        .join("")}</div>`
-    : `<p class="note">Tipp: Hinterlege Name und E-Mail in den Einstellungen der Erweiterung, dann stehen sie hier zum Kopieren bereit.</p>`;
   // Inline JSON inside <script>: escape "<" so no value can close the tag.
   const plan = JSON.stringify({ steps: handoff.steps }).replace(/</g, "\\u003c");
   return page(
@@ -92,8 +74,8 @@ Du füllst es aus und schickst es <strong>selbst</strong> ab – vorher wird nic
 <button class="primary" id="go" type="button">Merkliste füllen und Bestellformular öffnen</button>
 <p id="status" class="note" aria-live="polite"></p>
 <ol class="steps" id="steps" hidden></ol>
-${contactBlock}
-<p class="note">Bitte prüfe im Formular, ob alle Spiele aufgelistet sind. Fehlt eines, klicke den Knopf hier einfach noch einmal.</p>
+<p class="note">Bitte prüfe im Formular, ob alle Spiele aufgelistet sind. Fehlt eines, klicke den Knopf hier einfach noch einmal.
+Deine Kontaktdaten kann dein Browser dort meist automatisch ausfüllen.</p>
 <script nonce="${nonce}">
 const { steps } = ${plan};
 const labels = { clear: "Merkliste leeren", search: "Spiele suchen", add: "Spiel auf die Merkliste", form: "Bestellformular öffnen" };
@@ -133,13 +115,6 @@ go.addEventListener("click", async () => {
   }
   go.disabled = false; go.textContent = "Noch einmal";
 });
-for (const button of document.querySelectorAll("[data-copy]")) {
-  button.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(button.dataset.copy);
-    button.textContent = "Kopiert ✓";
-    setTimeout(() => (button.textContent = "Kopieren"), 1500);
-  });
-}
 </script>`,
   );
 }

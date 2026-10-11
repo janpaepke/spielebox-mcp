@@ -4,7 +4,7 @@
   "display_name": "Spielebox (inoffiziell)",
   "version": "0.0.0",
   "description": "Unofficial: search the WIENXTRA-Spielebox board game library in Vienna, check availability, and send reservation requests. Not affiliated with WIENXTRA.",
-  "long_description": "Unofficial, independent tool for the online catalog of the WIENXTRA-Spielebox (opac.wienxtra.at), Austria's largest board game library. Not affiliated with, endorsed or authorised by WIENXTRA. Search ~9000 games with filters for players, age and play time, see the availability of each copy, collect games on a reservation list and send it as a reservation request. You confirm every request yourself, in a form or on a page in your browser; your contact details are only used to prefill that confirmation and are sent only to the Spielebox.",
+  "long_description": "Unofficial, independent tool for the online catalog of the WIENXTRA-Spielebox (opac.wienxtra.at), Austria's largest board game library. Not affiliated with, endorsed or authorised by WIENXTRA. Search ~9000 games with filters for players, age and play time, see the availability of each copy, collect games on a reservation list and send it as a reservation request. You submit every reservation yourself on the Spielebox's official order form; the extension stores no personal data.",
   "author": {
     "name": "Jan Paepke",
     "url": "https://github.com/janpaepke"
@@ -27,10 +27,6 @@
       "command": "node",
       "args": ["${__dirname}/server/index.mjs"],
       "env": {
-        "SPIELEBOX_FIRST_NAME": "${user_config.first_name}",
-        "SPIELEBOX_LAST_NAME": "${user_config.last_name}",
-        "SPIELEBOX_EMAIL": "${user_config.email}",
-        "SPIELEBOX_PHONE": "${user_config.phone}",
         "SPIELEBOX_CHECK_UPDATES": "${user_config.check_updates}",
         "SPIELEBOX_DISTRIBUTION": "mcpb"
       }
@@ -79,30 +75,6 @@
     }
   ],
   "user_config": {
-    "first_name": {
-      "type": "string",
-      "title": "Vorname",
-      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
-      "required": false
-    },
-    "last_name": {
-      "type": "string",
-      "title": "Nachname",
-      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
-      "required": false
-    },
-    "email": {
-      "type": "string",
-      "title": "E-Mail",
-      "description": "Optional – die Spielebox bestätigt Reservierungen per E-Mail",
-      "required": false
-    },
-    "phone": {
-      "type": "string",
-      "title": "Telefon",
-      "description": "Optional – wird bei Reservierungsanfragen vorausgefüllt",
-      "required": false
-    },
     "check_updates": {
       "type": "boolean",
       "title": "Nach Updates suchen",
