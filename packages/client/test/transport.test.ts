@@ -21,6 +21,7 @@ function transport(replies: Reply[], options: Partial<TransportOptions> = {}) {
     minIntervalMs: 0,
     timeoutMs: 1000,
     retries: 2,
+    retryDelayMs: 0,
     now: () => 0,
     ...options,
   });
@@ -63,7 +64,7 @@ describe("Transport", () => {
   });
 
   it("retries network errors and 503s, then succeeds", async () => {
-    const { t, seen } = transport([new TypeError("socket"), { status: 503, headers: { "retry-after": "0" } }, {}]);
+    const { t, seen } = transport([new TypeError("socket"), { status: 503 }, {}]);
     await expect(t.get({})).resolves.toBe("<html></html>");
     expect(seen).toHaveLength(3);
   });

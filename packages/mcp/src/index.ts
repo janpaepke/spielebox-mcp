@@ -37,4 +37,6 @@ const updates =
 // For clients that can't show a confirmation (e.g. Claude Desktop): the user submits on the catalog's own order form.
 const handoff = { pages: new HandoffPages(), openBrowser: openInBrowser };
 
-serveStdio(() => createServer(client, { consent, contact, updates, handoff }));
+const log = (message: string) => console.error(`[spielebox] ${message}`);
+
+serveStdio(() => createServer(client, { consent, contact, updates, handoff, log }));

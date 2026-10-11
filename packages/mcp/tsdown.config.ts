@@ -14,6 +14,6 @@ export default defineConfig([
     platform: "node",
     dts: false,
     clean: true,
-    deps: { alwaysBundle: [/.*/] },
+    deps: { alwaysBundle: [/.*/], onlyBundle: false }, // bundling everything is the point; no hint listing it
   },
 ]);

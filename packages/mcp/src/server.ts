@@ -53,6 +53,8 @@ export type ServerOptions = {
    * shared by all server instances. Without it, `open_order_form` and `open_game_page` aren't offered.
    */
   handoff?: { pages: HandoffPages; openBrowser: (url: string) => void };
+  /** Diagnostics (stderr ends up in the MCP client's log). Silent if not given. */
+  log?: (message: string) => void;
 };
 
 const INSTRUCTIONS = `Unofficial tools (not affiliated with WIENXTRA) for the WIENXTRA-Spielebox in Vienna, Austria's largest board game library (~9000 games, lent for free or a small fee).
@@ -94,7 +96,7 @@ const SubmitOutcome = z.object({
 
 /** Builds the MCP server. Each tool validates with the client's schemas and relays to one client method. */
 export function createServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
-  const { consent, contact = {}, updates, handoff } = options;
+  const { consent, contact = {}, updates, handoff, log = () => {} } = options;
 
   /** Relays a client call; the first call also starts the update check, and a pending update notice rides along once. */
   const relay = async <T extends Record<string, unknown>>(call: () => Promise<T>): Promise<CallToolResult> => {
@@ -279,7 +281,7 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
       const supported = elicitationModes(ctx, server.server.getClientCapabilities());
       // Which confirmation the client supports decides the route; logged (stderr → the client's MCP log) because
       // clients don't always support what their documentation suggests.
-      console.error(`[spielebox] submit_reservation_request: elicitation ${JSON.stringify(supported)}`);
+      log(`submit_reservation_request: elicitation ${JSON.stringify(supported)}`);
       const round = await consent.run(ctx, supported, async () => {
         let list: ReservationList;
         try {

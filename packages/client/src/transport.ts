@@ -12,6 +12,8 @@ export type TransportOptions = {
   timeoutMs: number;
   /** Retries for failed GETs (network errors, 429, 5xx). */
   retries: number;
+  /** Base delay before a retry; doubles per attempt, plus jitter. Retry-After from the server takes precedence. */
+  retryDelayMs: number;
   /** Clock, injectable for tests. */
   now: () => number;
 };
@@ -108,7 +110,7 @@ export class Transport {
         });
       } catch (error) {
         if (attempt < this.#options.retries) {
-          await sleep(backoff(attempt));
+          await sleep(this.#backoff(attempt));
           continue;
         }
         throw new HttpError(`Request failed: ${url}`, undefined, { cause: error });
@@ -117,11 +119,17 @@ export class Transport {
       this.#storeSession(response);
       if (response.ok) return response.text();
       if (RETRYABLE.has(response.status) && attempt < this.#options.retries) {
-        await sleep(retryAfter(response) ?? backoff(attempt));
+        await sleep(retryAfter(response) ?? this.#backoff(attempt));
         continue;
       }
       throw new HttpError(`HTTP ${response.status} for ${url}`, response.status);
     }
+  }
+
+  /** retryDelayMs, 2×, 4× … plus up to half of it as jitter. */
+  #backoff(attempt: number): number {
+    const base = this.#options.retryDelayMs * 2 ** attempt;
+    return base + Math.random() * (this.#options.retryDelayMs / 2);
   }
 
   #storeSession(response: Response): void {
@@ -142,13 +150,11 @@ export const defaultTransportOptions = (userAgent: string): TransportOptions => 
   minIntervalMs: 500,
   timeoutMs: 30_000,
   retries: 2,
+  retryDelayMs: 500,
   now: Date.now,
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** 0.5 s, 1 s, 2 s … plus up to 250 ms jitter. */
-const backoff = (attempt: number) => 500 * 2 ** attempt + Math.random() * 250;
 
 /** `Retry-After` in seconds, capped at 10 s. */
 function retryAfter(response: Response): number | null {

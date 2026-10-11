@@ -4,7 +4,7 @@
  * Checks that `main` is clean and in sync with GitHub, runs all checks, sets the version in both packages, commits,
  * tags `v1.2.3` and pushes both. The release workflow then builds the Claude Desktop extension and publishes the release.
  */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const run = (cmd: string, args: string[], quiet = false) =>
@@ -18,7 +18,9 @@ const fail = (message: string): never => {
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
-const version = args.find((a) => !a.startsWith("--")) ?? fail("usage: pnpm release <version> [--dry-run], e.g. 0.4.2");
+const version = (
+  args.find((a) => !a.startsWith("--")) ?? fail("usage: pnpm release <version> [--dry-run], e.g. 0.4.2")
+).replace(/^v/, "");
 if (!/^\d+\.\d+\.\d+$/.test(version)) fail(`"${version}" is not a version like 1.2.3`);
 
 const PACKAGES = ["packages/client", "packages/mcp"];
@@ -35,7 +37,18 @@ if (run("git", ["rev-parse", "HEAD"], true) !== run("git", ["rev-parse", "origin
 if (run("git", ["tag", "--list", `v${version}`], true)) fail(`tag v${version} already exists`);
 
 console.log(`Releasing v${version} (current: ${current})${dryRun ? " — dry run" : ""}`);
-for (const script of ["build", "lint", "typecheck", "test"]) run("pnpm", [script]);
+// Checks print one line each; their full output only appears when one fails.
+for (const script of ["build", "lint", "typecheck", "test"]) {
+  process.stdout.write(`  ${script.padEnd(10)}`);
+  const result = spawnSync("pnpm", [script], { encoding: "utf8" });
+  if (result.status !== 0) {
+    console.log("✗\n");
+    process.stdout.write(`${result.stdout}${result.stderr}`);
+    fail(`${script} failed; nothing was tagged`);
+  }
+  const passed = [...result.stdout.matchAll(/Tests\s+(\d+) passed/g)].reduce((sum, m) => sum + Number(m[1]), 0);
+  console.log(passed ? `✓ (${passed} tests)` : "✓");
+}
 
 const steps: [string, () => void][] = [];
 if (version !== current) {
@@ -54,10 +67,13 @@ if (version !== current) {
   ]);
 }
 steps.push([`tag v${version}`, () => run("git", ["tag", "-a", `v${version}`, "-m", `v${version}`])]);
-steps.push([`push main and v${version}`, () => run("git", ["push", "--atomic", "origin", "main", `v${version}`])]);
+steps.push([
+  `push main and v${version}`,
+  () => run("git", ["push", "--quiet", "--atomic", "origin", "main", `v${version}`]),
+]);
 
 for (const [label, step] of steps) {
-  console.log(`${dryRun ? "would " : ""}${label}`);
+  console.log(`  ${dryRun ? "would " : ""}${label}`);
   if (!dryRun) step();
 }
 if (dryRun) process.exit(0);
