@@ -83,8 +83,8 @@ function content(handoff: Handoff) {
 <p>Ein Klick legt diese Spiele in einem neuen Tab auf die Merkliste der Spielebox und öffnet dort das offizielle Bestellformular.
 Du füllst es aus und schickst es <strong>selbst</strong> ab – vorher wird nichts gesendet.</p>`,
     button: "Merkliste füllen und Bestellformular öffnen",
-    note: `<p class="note">Bitte prüfe im Formular, ob alle Spiele aufgelistet sind. Fehlt eines, klicke den Knopf hier einfach noch einmal.
-Deine Kontaktdaten kann dein Browser dort meist automatisch ausfüllen.</p>`,
+    note: `<p class="note">Diese Seite schließt sich danach von selbst. Deine Kontaktdaten kann dein Browser im Formular meist automatisch
+ausfüllen.</p>`,
     done: "Fertig: Das Bestellformular ist im anderen Tab offen. Dort ausfüllen und abschicken.",
     tab: "spielebox-bestellung",
   };
@@ -134,7 +134,10 @@ go.addEventListener("click", async () => {
       list.children[i].className = "done";
     }
     tab.focus();
-    status.textContent = done;
+    status.textContent = done + " Du kannst diesen Tab schließen.";
+    // Leaves the user on the catalog's page. Browsers allow this for tabs opened just for this page (a single history
+    // entry, e.g. opened by the server); otherwise they ignore it and the message above stays.
+    window.close();
   } catch {
     status.textContent = "Die Spielebox hat zu lange nicht geantwortet. Bitte noch einmal versuchen.";
   }
