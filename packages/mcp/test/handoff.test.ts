@@ -60,7 +60,7 @@ describe("HandoffPages", () => {
     expect(html).toContain("<h1>CATAN &lt;Connect&gt;</h1>");
     expect(html).toContain("Detailseite öffnen");
     expect(html.split("<script")[0]).not.toContain("Merkliste");
-    expect(html).toContain('"tab":"spielebox-katalog"');
+    expect(html).toContain('"kind":"detail"');
   });
 
   it("answers unknown, expired and non-GET requests without the plan", async () => {

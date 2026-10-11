@@ -197,11 +197,15 @@ MCP Apps extension), so no consent channel can run there, and `submit_reservatio
 - The client plans the steps (`planOrderFormHandoff`): fresh availability check, then the catalog URLs for clear →
   one search per locator → add each game → order form. It sends nothing itself.
 - The MCP layer serves a local page (`handoff/pages.ts`, 127.0.0.1, one-time ticket) and opens it in the default browser.
-  One click there walks a second tab through the steps, and the user submits the **official** form themselves (the form
-  can't be prefilled; browser autofill usually covers name and e-mail).
-- Each step waits until the catalog tab actually shows the catalog's page (it becomes unreadable for our page) and then
-  returns the tab to a blank page of our own origin. No fixed delays: about 1–2 s for 4 games, correct on slow
-  connections too. Every step URL is unique per run, because the catalog lets browsers cache some responses for hours.
+  One click there opens a small **helper window** that runs the preparing steps (clear, searches, adds) and closes; then
+  the user's own tab navigates to the final catalog page. This works because a browser's cookies are shared by all its
+  windows, so the helper's catalog session is the tab's. The user ends up on the **official** form (or detail page) in
+  their tab and submits it themselves (the form can't be prefilled; browser autofill usually covers name and e-mail).
+- Each step waits until the helper actually shows the catalog's page (it becomes unreadable for our page) and then
+  returns it to a blank page of our own origin. No fixed delays: about 1–2 s for 4 games, correct on slow connections
+  too. Every step URL is unique per run, because the catalog lets browsers cache some responses for hours.
+- Not possible (tested): a link alone (session only via cookie), an iframe (third-party cookies are blocked or separate),
+  a hidden or background window (browsers block pop-unders), opening the helper without a click (pop-up blockers).
 - With this path the user, not the server, sends the request, and the server never handles contact data. The Desktop
   extension therefore has no contact settings at all; only `check_updates` remains in its `user_config`.
 - Claude Desktop passes the literal `${user_config.x}` for optional settings left empty; the server treats those as unset.

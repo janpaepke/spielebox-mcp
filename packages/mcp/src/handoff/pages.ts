@@ -47,7 +47,9 @@ export class HandoffPages {
 
   async #handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // Neutral page of our own origin that the catalog tab returns to between steps (see the page script).
-    if (req.url === "/blank") return send(res, 200, page("Einen Moment", '<p class="note">Einen Moment …</p>'));
+    if (req.url === "/blank") {
+      return send(res, 200, page("Einen Moment", '<p class="note">Spielebox wird vorbereitet …</p>'));
+    }
     const ticket = /^\/h\/([\w-]{32})$/.exec(req.url ?? "")?.[1];
     const entry = ticket ? this.#handoffs.get(ticket) : undefined;
     if (!entry || entry.expires < this.#now()) {
@@ -65,35 +67,31 @@ export class HandoffPages {
 
 /** Texts per purpose; everything else (the step runner) is shared. */
 function content(handoff: Handoff) {
+  const helperNote = "Dafür öffnet sich kurz ein kleines Fenster der Spielebox, das sich von selbst wieder schließt.";
   if (handoff.purpose === "game") {
     return {
       title: handoff.title,
       body: `<h1>${escapeHtml(handoff.title)}</h1>
-<p>Ein Klick öffnet die Detailseite dieses Spiels im Katalog der Spielebox, in einem neuen Tab.</p>`,
+<p>Ein Klick öffnet hier die Detailseite dieses Spiels im Katalog der Spielebox.</p>`,
       button: "Detailseite öffnen",
-      note: "",
-      done: "Fertig: Die Detailseite ist im anderen Tab offen.",
-      tab: "spielebox-katalog",
+      note: `<p class="note">${helperNote}</p>`,
     };
   }
   return {
     title: "Reservierungsanfrage",
     body: `<h1>Reservierungsanfrage an die Spielebox</h1>
 <ul>${handoff.titles.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
-<p>Ein Klick legt diese Spiele in einem neuen Tab auf die Merkliste der Spielebox und öffnet dort das offizielle Bestellformular.
+<p>Ein Klick legt diese Spiele auf die Merkliste der Spielebox und öffnet hier ihr offizielles Bestellformular.
 Du füllst es aus und schickst es <strong>selbst</strong> ab – vorher wird nichts gesendet.</p>`,
     button: "Merkliste füllen und Bestellformular öffnen",
-    note: `<p class="note">Diese Seite schließt sich danach von selbst. Deine Kontaktdaten kann dein Browser im Formular meist automatisch
-ausfüllen.</p>`,
-    done: "Fertig: Das Bestellformular ist im anderen Tab offen. Dort ausfüllen und abschicken.",
-    tab: "spielebox-bestellung",
+    note: `<p class="note">${helperNote} Deine Kontaktdaten kann dein Browser im Formular meist automatisch ausfüllen.</p>`,
   };
 }
 
 function handoffPage(handoff: Handoff, nonce: string): string {
   const text = content(handoff);
   // Inline JSON inside <script>: escape "<" so no value can close the tag.
-  const plan = JSON.stringify({ steps: handoff.steps, done: text.done, tab: text.tab }).replace(/</g, "\\u003c");
+  const plan = JSON.stringify({ steps: handoff.steps }).replace(/</g, "\\u003c");
   return page(
     text.title,
     `${text.body}
@@ -102,15 +100,17 @@ function handoffPage(handoff: Handoff, nonce: string): string {
 <ol class="steps" id="steps" hidden></ol>
 ${text.note}
 <script nonce="${nonce}">
-const { steps, done, tab: tabName } = ${plan};
+const { steps } = ${plan};
 const labels = { clear: "Merkliste leeren", search: "Im Katalog suchen", add: "Spiel auf die Merkliste", form: "Bestellformular öffnen", detail: "Detailseite öffnen" };
 const list = document.getElementById("steps"), status = document.getElementById("status"), go = document.getElementById("go");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// The catalog tab can't be inspected, but it is readable while it shows a page of our own origin and unreadable once
-// a catalog page has replaced it. A catalog page that is shown has been processed by the catalog, so each step waits
-// for exactly that, then returns the tab to our blank page before the next one. No fixed delays, no skipped steps.
+// The browser's cookies are shared by all its windows: a small helper window runs the preparing steps (searches, Merkliste)
+// and closes, then this tab opens the final catalog page in the same catalog session. The helper can't be inspected,
+// but it is readable while it shows a page of our own origin and unreadable once a catalog page has replaced it. A
+// catalog page that is shown has been processed by the catalog, so each step waits for exactly that and returns the
+// helper to our blank page before the next one. No fixed delays, no skipped steps.
 const blank = location.origin + "/blank";
-const ours = (tab) => { try { return tab.location.href === blank && tab.document.readyState === "complete"; } catch { return false; } };
+const ours = (w) => { try { return w.location.href === blank && w.document.readyState === "complete"; } catch { return false; } };
 // The catalog lets browsers cache some responses for hours (e.g. clearing the Merkliste), so every page load gets a
 // unique URL, as the catalog's own scripts do. deletebasket only accepts a number.
 const fresh = (url, id) =>
@@ -119,29 +119,30 @@ async function until(check, ms = 20000) {
   for (const start = Date.now(); !check(); await sleep(25)) if (Date.now() - start > ms) throw new Error("timeout");
 }
 go.addEventListener("click", async () => {
-  const tab = window.open(blank, tabName);
-  if (!tab) { status.textContent = "Der Browser hat das neue Tab blockiert. Bitte Pop-ups für diese Seite erlauben und erneut klicken."; return; }
+  const helper = window.open(blank, "spielebox-helfer", "popup,width=420,height=240");
+  if (!helper) { status.textContent = "Der Browser hat das Fenster blockiert. Bitte Pop-ups für diese Seite erlauben und erneut klicken."; return; }
   go.disabled = true; list.hidden = false;
   list.innerHTML = steps.map((s) => "<li>" + labels[s.kind] + "</li>").join("");
+  const run = Date.now().toString(36);
+  const prepare = steps.slice(0, -1), target = steps[steps.length - 1];
   try {
-    await until(() => ours(tab));
-    const run = Date.now().toString(36);
-    for (const [i, step] of steps.entries()) {
-      status.textContent = "Schritt " + (i + 1) + " von " + steps.length + " …";
-      tab.location.href = fresh(step.url, run + i);
-      await until(() => !ours(tab));
-      if (i < steps.length - 1) { tab.location.href = blank; await until(() => ours(tab)); }
+    await until(() => ours(helper));
+    for (const [i, step] of prepare.entries()) {
+      status.textContent = labels[step.kind] + " … (" + (i + 1) + " von " + steps.length + ")";
+      helper.location.href = fresh(step.url, run + i);
+      await until(() => !ours(helper));
+      if (i < prepare.length - 1) { helper.location.href = blank; await until(() => ours(helper)); }
       list.children[i].className = "done";
     }
-    tab.focus();
-    status.textContent = done + " Du kannst diesen Tab schließen.";
-    // Leaves the user on the catalog's page. Browsers allow this for tabs opened just for this page (a single history
-    // entry, e.g. opened by the server); otherwise they ignore it and the message above stays.
-    window.close();
+    helper.close();
+    list.children[steps.length - 1].className = "done";
+    status.textContent = labels[target.kind] + " …";
+    location.href = fresh(target.url, run + "z");
   } catch {
+    helper.close();
     status.textContent = "Die Spielebox hat zu lange nicht geantwortet. Bitte noch einmal versuchen.";
+    go.disabled = false; go.textContent = "Noch einmal";
   }
-  go.disabled = false; go.textContent = "Noch einmal";
 });
 </script>`,
   );

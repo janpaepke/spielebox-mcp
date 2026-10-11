@@ -79,7 +79,7 @@ environment variables above. Reservation requests need a client that supports MC
 | `get_games` | Full details for up to 10 games: description, keywords, play time, availability of each copy. |
 | `list_filters` | Keywords (e.g. *Kooperationsspiele*, *ausgezeichnet*), player counts, ages and play times for a term. |
 | `list_new_games` | Recently added games. |
-| `open_game_page` | Opens a game's page in the Spielebox catalog in your browser (one click on a small local page). |
+| `open_game_page` | Opens a game's page in the Spielebox catalog in your browser (one click on a small local page; a small window flashes up briefly). |
 | `reservation_list_add` / `_remove` / `_show` / `_clear` | A list of games for your next reservation request. It lives only in the running server, not on the catalog. |
 | `submit_reservation_request` | Sends the reservation list to the Spielebox, after your confirmation (clients with forms, e.g. Claude Code). |
 | `open_order_form` | Opens the Spielebox's order form in your browser with the reservation list on it; you submit it there (e.g. Claude Desktop). |
@@ -91,8 +91,8 @@ Reserving is binding for you, so nothing is sent without your explicit confirmat
 - **Claude Code** shows a form with the games, your contact details and the wording of the Spielebox's order form. Claude Code
   also asks for permission on every call of this tool.
 - **Claude Desktop** can't show such a form for extensions, so there Claude opens a page in your browser instead. One click
-  puts your games on the Spielebox's Merkliste and opens its **official order form**, where you fill in your details (your
-  browser can usually autofill them) and submit it yourself.
+  puts your games on the Spielebox's Merkliste (a small window flashes up briefly for that) and opens its **official order
+  form** in the same tab, where you fill in your details (your browser can usually autofill them) and submit it yourself.
 
 Before sending, availability is checked again, and the request only goes out if it contains exactly the games you confirmed.
 The Spielebox takes at most 6 games per request.
