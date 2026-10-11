@@ -23,7 +23,7 @@ pnpm format      # Biome, writes fixes
 | `packages/client` | `@janpaepke/spielebox-client`: transport (session, throttling, retries), pure HTML parsers, zod schemas, the `SpieleboxClient` facade. No MCP dependency. |
 | `packages/mcp` | `spielebox-mcp`: MCP tools that relay to the client, and the consent layer (`src/consent`) for reservation requests. |
 | `packages/mcp/mcpb` | Manifest of the Claude Desktop extension. |
-| `docs/` | How the catalog works ([opac-research.md](docs/opac-research.md)), the design ([architecture.md](docs/architecture.md)) and the research behind it. |
+| `docs/` | How the catalog works ([opac-research.md](docs/opac-research.md)) and the design ([architecture.md](docs/architecture.md)). |
 
 Read [docs/architecture.md](docs/architecture.md) before larger changes. In short: schemas in the client are the single source of
 truth; the MCP layer stays a thin relay; presentation of consent lives in channels behind the consent gate.

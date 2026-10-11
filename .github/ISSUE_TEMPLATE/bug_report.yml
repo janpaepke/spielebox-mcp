@@ -1,0 +1,23 @@
+name: Bug report
+description: Something in spielebox-mcp doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you ask or do, what did you expect, what happened instead? Please leave out personal data (e-mail, phone).
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Where do you use it?
+      options: [Claude Desktop, Claude Code, Other MCP client]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release or commit, if you know it

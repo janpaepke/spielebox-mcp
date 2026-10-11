@@ -1,8 +1,8 @@
-# Architecture (proposal)
+# Architecture
 
-Status: **v0.1–v0.3 implemented** (2026-10-11). The reservation request is tested against a fake catalog only; the first real submission is still pending. This doc is based on [opac-research.md](opac-research.md) and on the three reports in
-[research/](research/): a [survey of existing library MCP servers](research/mcp-server-survey.md),
-[best practices](research/best-practices.md) and the [client stack](research/client-stack.md).
+Status: **v0.1–v0.3 implemented, plus consent channels and the Claude Desktop extension** (2026-10-11). The reservation request is
+tested against a fake catalog only; the first real submission is still pending. This doc builds on
+[opac-research.md](opac-research.md), research into existing library/catalog MCP servers, MCP best practices and client stacks.
 Open decisions are marked **[decide]** (none at the moment).
 
 ## Goals
