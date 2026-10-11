@@ -1,55 +1,133 @@
 # spielebox-mcp
 
-A typed client and an MCP server for the [WIENXTRA-Spielebox](https://www.wienxtra.at/spielebox/) online catalog
-([opac.wienxtra.at](https://opac.wienxtra.at/?location=sb)), Austria's largest board game library.
+**Unofficial** tools that let AI assistants like Claude use the online catalog of the
+[WIENXTRA-Spielebox](https://www.wienxtra.at/spielebox/), Austria's largest board game library in Vienna: search ~9000 games,
+check what's available right now, and send a reservation request for pickup.
 
-The catalog has no API, so the client scrapes its server-rendered HTML. The MCP server is a thin layer on top of the client.
+> [!IMPORTANT]
+> This is an independent project by a private individual. It is **not** an official WIENXTRA service and is not affiliated
+> with WIENXTRA. See [Legal notice](#legal-notice--rechtliche-hinweise).
 
-| Package | Purpose |
-|---|---|
-| [`packages/client`](packages/client) (`@janpaepke/spielebox-client`) | Search, game details and availability. Later also the reservation list and reservation requests. No MCP dependency. |
-| [`packages/mcp`](packages/mcp) (`spielebox-mcp`) | MCP stdio server exposing the client as tools. |
+## What you can ask
 
-Status: v0.3: search, filters, details, new games, a reservation list, and submitting reservation requests with explicit consent (not yet used against the real catalog). See [docs/architecture.md](docs/architecture.md) for the design and
-[docs/opac-research.md](docs/opac-research.md) for how the OPAC works.
+- *"Which cooperative games for 4 players, suitable for a 10-year-old, are available at the Spielebox right now?"*
+- *"Is Flügelschlag available? How many copies?"*
+- *"What's new at the Spielebox?"*
+- *"Put Planet Unknown and Colt Express on my reservation list and reserve them."*
 
-## Use with Claude Code
+The assistant searches the catalog, filters by players, age, play time and availability, looks up the status of each copy, and
+can collect games on a reservation list. Reserving always asks you first (see [Reservation requests](#reservation-requests)).
 
-Not published to npm yet. Build it, then register the local build:
+## Install
+
+### Claude Desktop
+
+1. Download `spielebox.mcpb` from the [latest release](https://github.com/janpaepke/spielebox-mcp/releases/latest).
+2. Double-click it, or drag it into Claude Desktop (*Settings → Extensions*), and confirm the installation.
+3. Optional: enter your name, e-mail and phone in the extension's settings. They only prefill the confirmation of reservation
+   requests.
+
+No other software is needed: Claude Desktop brings its own Node.js.
+
+### Claude Code
+
+Build from source (Node ≥ 22.19 and pnpm), then register the server:
 
 ```sh
+git clone https://github.com/janpaepke/spielebox-mcp.git && cd spielebox-mcp
 pnpm install && pnpm build
 claude mcp add spielebox \
   -e SPIELEBOX_FIRST_NAME=… -e SPIELEBOX_LAST_NAME=… -e SPIELEBOX_EMAIL=… -e SPIELEBOX_PHONE=… \
   -- node "$(pwd)/packages/mcp/dist/index.mjs"
 ```
 
-The contact variables are optional; they only prefill the confirmation form of a reservation request.
+The `SPIELEBOX_*` variables are optional.
 
-| Tools | Effect |
+### Other MCP clients
+
+Any MCP client that runs local (stdio) servers works: run `node packages/mcp/dist/index.mjs`, optionally with the `SPIELEBOX_*`
+environment variables above. Reservation requests need a client that supports MCP elicitation (form or URL mode).
+
+## Tools
+
+| Tool | What it does |
 |---|---|
-| `search_games`, `get_games`, `list_filters`, `list_new_games` | Read the catalog. |
-| `reservation_list_add` / `_remove` / `_show` / `_clear` | Change a list in the server's memory, not on the catalog. |
-| `submit_reservation_request` | **Binding.** Sends the list to the Spielebox. Asks you in a form every time (games, contact data, the order form's wording), and Claude Code additionally asks for permission on every call. Needs an MCP client that supports elicitation forms. |
+| `search_games` | Search by term, with filters for players, age, play time, keyword and availability. |
+| `get_games` | Full details for up to 10 games: description, keywords, play time, availability of each copy. |
+| `list_filters` | Keywords (e.g. *Kooperationsspiele*, *ausgezeichnet*), player counts, ages and play times for a term. |
+| `list_new_games` | Recently added games. |
+| `reservation_list_add` / `_remove` / `_show` / `_clear` | A list of games for your next reservation request. It lives only in the running server, not on the catalog. |
+| `submit_reservation_request` | Sends the reservation list to the Spielebox, after your confirmation. |
 
-A sent request is not a booking yet: the Spielebox staff confirm by e-mail when the games are ready.
+## Reservation requests
 
-## Development
+Reserving is binding for you, so nothing is sent without your explicit confirmation:
 
-Requires Node ≥ 22.19 and pnpm.
+- **Claude Code** shows a form with the games, your contact details and the wording of the Spielebox's order form. Claude Code
+  also asks for permission on every call of this tool.
+- **Claude Desktop** opens a confirmation page in your browser (served locally from your own computer) with the same content.
 
-```sh
-pnpm install
-pnpm build       # all packages
-pnpm test
-pnpm typecheck
-pnpm lint        # Biome
-pnpm format      # Biome, writes fixes
-```
+Before sending, availability is checked again, and the request only goes out if it contains exactly the games you confirmed.
+A sent request is not yet a booking: the Spielebox staff prepare the games and confirm by e-mail. Their usual rules apply
+(order at least a day before pickup; pick up within a few working days).
 
-Client tests run against recorded HTML in `packages/client/test/fixtures`. Two scripts talk to the real catalog (GET only):
+## Good to know
 
-```sh
-pnpm --filter @janpaepke/spielebox-client fixtures   # re-record fixtures; expectations may need updating
-pnpm --filter @janpaepke/spielebox-client test:live  # canary: fails when the site's markup or behavior changed
-```
+- **Search** matches a contiguous piece of text in titles, authors, descriptions and keywords, at least 3 characters, no AND/OR.
+  Search for one distinctive word (*"flügelschlag"*) or part of the title (*"die siedler"*).
+- **Availability** changes all the time; results show when they were read.
+- **The catalog has no API.** This project reads the same web pages you would see in a browser. When the Spielebox changes its
+  website, things can break until this project is updated.
+- **Gentle by design:** one request at a time, at least 500 ms apart, only for what you ask. No crawling, no copies of the catalog.
+
+## Legal notice / Rechtliche Hinweise
+
+**Unofficial project.** spielebox-mcp is an independent, non-commercial open-source project by a private individual. It is not an
+official WIENXTRA service and is not affiliated with, endorsed, authorised or sponsored by WIENXTRA, the WIENXTRA-Spielebox or
+the City of Vienna. "WIENXTRA" and "WIENXTRA-Spielebox" are names or trademarks of their owners and are used here only to
+identify the catalogue this software works with. Please send questions about games, lending and reservations to the Spielebox;
+report bugs in this software [here as an issue](https://github.com/janpaepke/spielebox-mcp/issues), not to the Spielebox.
+
+**No warranty.** The software is provided free of charge. Catalogue data and availability may be incomplete, outdated or wrong,
+and the software may stop working at any time, for example when the catalogue website changes. A reservation request is sent
+only after you explicitly confirm it, goes directly to the Spielebox, and only becomes a reservation once the Spielebox confirms
+it. Warranty and liability are governed by the [license](LICENSE) to the extent permitted by law.
+
+**Privacy.** The software runs locally on your computer. Your contact details are stored only in your local configuration and are
+sent directly to WIENXTRA only when you confirm a reservation request; WIENXTRA's [privacy policy](https://wienxtra.at/datenschutz)
+applies to that data. The developer receives no data. Search queries and results, and contact details entered in your AI
+assistant's confirmation form, pass through your AI assistant and are subject to its provider's terms.
+
+<details lang="de">
+<summary>Deutsch</summary>
+
+**Inoffizielles Projekt.** spielebox-mcp ist ein unabhängiges, nicht-kommerzielles Open-Source-Projekt einer Privatperson. Es ist
+kein offizielles Angebot von WIENXTRA und steht in keiner Verbindung zu WIENXTRA, der WIENXTRA-Spielebox oder der Stadt Wien; es
+wird von diesen weder unterstützt noch autorisiert oder gesponsert. „WIENXTRA“ und „WIENXTRA-Spielebox“ sind Namen bzw. Marken
+ihrer Inhaber und werden hier nur verwendet, um anzugeben, mit welchem Online-Katalog das Programm funktioniert. Fragen zu
+Spielen, Ausleihe und Reservierungen richten Sie bitte an die Spielebox, Fehler dieses Programms dagegen
+[als Issue hier](https://github.com/janpaepke/spielebox-mcp/issues) und nicht an die Spielebox.
+
+**Ohne Gewähr.** Die Software wird unentgeltlich zur Verfügung gestellt. Katalogdaten und Verfügbarkeiten können unvollständig,
+veraltet oder falsch sein, und das Programm kann jederzeit ausfallen, etwa wenn sich die Website des Katalogs ändert. Eine
+Reservierungsanfrage wird nur nach Ihrer ausdrücklichen Bestätigung gesendet, geht direkt an die Spielebox und wird erst zur
+Reservierung, wenn die Spielebox sie bestätigt. Gewährleistung und Haftung richten sich nach der [Lizenz](LICENSE), soweit
+gesetzlich zulässig.
+
+**Datenschutz.** Das Programm läuft lokal auf Ihrem Rechner. Ihre Kontaktdaten werden nur in Ihrer lokalen Konfiguration
+gespeichert und nur bei einer von Ihnen bestätigten Reservierungsanfrage direkt an WIENXTRA übermittelt; für diese Daten gilt die
+[Datenschutzerklärung von WIENXTRA](https://wienxtra.at/datenschutz). Der Entwickler erhält keine Daten. Suchanfragen und
+Ergebnisse sowie Kontaktdaten, die Sie im Bestätigungsformular Ihres KI-Assistenten eingeben, laufen über Ihren KI-Assistenten und
+unterliegen den Bedingungen von dessen Anbieter.
+
+</details>
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Design and background: [docs/architecture.md](docs/architecture.md) and
+[docs/opac-research.md](docs/opac-research.md).
+
+## License
+
+[MIT](LICENSE). The Claude Desktop extension bundles third-party packages; their licenses are included in the bundle
+(`THIRD_PARTY_LICENSES.txt`).

@@ -104,7 +104,7 @@ submission creates a binding pre-order.
 
 The OPAC sends **no confirmation to the customer**. It e-mails a request to the staff, and they handle it by hand:
 
-1. On submit, the OPAC host (`(internal mail host)`) sends a mail "Reservierungsanfrage über wienXtra webOPAC"
+1. On submit, the OPAC sends a mail "Reservierungsanfrage über wienXtra webOPAC"
    **to `spielebox@wienxtra.at`, with the customer's address as `From`**. It contains:
    - timestamp
    - customer data: Vorname, Nachname, E-Mail, Telefon, "Datenschutzbestimmungen akzeptiert: ja". This is the `agb` checkbox,

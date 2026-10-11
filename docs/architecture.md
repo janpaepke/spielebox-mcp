@@ -54,7 +54,10 @@ packages/client
   client.ts    facade: SpieleboxClient
   cli.ts       (later) a CLI on top of the facade
 packages/mcp
-  index.ts     registerTool(name, { inputSchema, outputSchema, annotations }, args => client.x(args))
+  server.ts    registerTool(name, { inputSchema, outputSchema, annotations }, args => client.x(args))
+  consent/     gate (signed round trip, single use, channel choice) + channels: form, url (local page) …
+  index.ts     wires one client and one consent gate for the process, serves stdio
+  mcpb/        Claude Desktop extension manifest (packaging only, no code)
 ```
 
 Parsers never fetch, and the transport never parses. When a schema check fails, the client throws `MarkupChangedError`. That error is the alarm for when the site's markup changes.
@@ -156,26 +159,42 @@ Implementation notes:
 - **The success page has never been recorded.** The client counts any response that is neither the error box nor the form again
   as accepted, and returns the page text verbatim. The test fixture for it is synthetic and marked as such.
 
-Consent in the MCP layer (`submit_reservation_request`), in two independent layers, failing closed:
-1. **Elicitation form** (MRTR `inputRequired`): the exact list of titles, the pickup note, the order form's checkbox wording
-   verbatim, a required confirm box, and the contact fields, prefilled from `SPIELEBOX_FIRST_NAME`, `SPIELEBOX_LAST_NAME`,
-   `SPIELEBOX_EMAIL` and `SPIELEBOX_PHONE` and editable.
-   - `requestState` is signed by the SDK codec: an HMAC with a 5-minute TTL, bound to the method. It holds the ids shown in the
-     form and a nonce, never personal data. The SDK rejects forged or expired state before the handler runs.
-   - On the second round the server requires the nonce to be unused, `accept`, a ticked confirm box, and valid contact data. It then
-     passes the confirmed ids to the client, which sends **only if they are exactly the reservation list**, checked inside the same
-     lock as the submission, so a concurrent change can't slip in. Decline, cancel or an unticked box → `{ sent: false, reason }`,
-     which is not an error.
-   - The key and the nonce store are **process-wide**: the SDK may build a server instance per request, and the round trip spans two.
-2. **Claude Code always-ask:** `_meta["anthropic/requiresUserInteraction"]: true` forces a permission prompt on every call, even in
-   auto or bypass mode.
+### Consent layer
 
-A client that doesn't declare elicitation can't use the tool: the SDK rejects the input request (`-32021`). Tests cover acceptance,
-decline, cancel, an unticked box, a list changed mid-flow, invalid contact data, a client without forms, a replayed confirmation
-and a forged state. A live probe ran the flow against the real catalog with a fetch guard that blocks every POST and Merkliste request:
-the form showed the real titles and declining sent nothing.
+Consent is a separate layer between the tool and the client UI:
 
-Later, Claude Desktop could get an MCP Apps UI with a submit tool that only the app can call.
+- **Gate** (`consent/gate.ts`): one per process, shared by all server instances (the SDK may build one per request, while the
+  round trip spans two). It chooses the first channel the client supports, puts the shown ids, the channel and a single-use nonce
+  into SDK-signed `requestState` (HMAC, 5 min, bound to the method; no personal data), enforces single use, and routes round 2 back
+  to the channel. The SDK rejects forged or expired state before the handler runs.
+- **Channels** (`consent/*.ts`) only present and collect:
+  - **form**: an elicitation form in the client (Claude Code): exact titles, pickup note, the order form's checkbox wording
+    verbatim, a required confirm box, contact fields prefilled from config and editable.
+  - **url**: for clients with URL-mode elicitation only (**Claude Desktop**, see below). A local confirmation page with the same
+    content on `127.0.0.1` (random port, one-time ticket in the path, no personal data in the URL, Host and Origin checks, escaped
+    content, strict CSP). The client asks the user to open it; round 2 then waits (up to 4 min) for the page's answer, which is the
+    flow the spec describes for URL mode.
+  - Future channels (e.g. MCP Apps) plug in without touching the tools.
+- **Tool**: once a channel grants consent, the tool passes the confirmed contact and ids to the client, which sends **only if the
+  ids are exactly the reservation list**, checked inside the same lock as the submission. Decline, cancel, an unticked box or a
+  timeout → `{ sent: false, reason }`, which is not an error.
+- **Claude Code always-ask:** `_meta["anthropic/requiresUserInteraction"]: true` forces a permission prompt on every call, even in
+  auto or bypass mode. A second, independent layer.
+
+A client with neither form nor URL elicitation gets a tool error; without a consent gate the server doesn't offer the tool at all.
+
+Tests cover acceptance, decline, cancel, an unticked box, invalid contact data, a list changed mid-flow, a client without
+elicitation, the URL flow (page confirmed, declined, not opened, timed out), the confirmation page's Host/Origin checks and
+escaping, a replayed confirmation and a forged state. A live probe ran the form flow against the real catalog with a fetch guard
+that blocks every POST and Merkliste request.
+
+### Clients (verified 2026-10-11)
+
+- **Claude Code** declares form and URL elicitation → form channel.
+- **Claude Desktop** (2.31226.1): its MCP client is created with `capabilities: { elicitation: { url: {} } }` and negotiates
+  protocol 2026-07-28 (read from the installed app bundle) → URL channel. Local MCP servers only run in Desktop chat as a
+  Desktop Extension (`.mcpb`) or via `claude_desktop_config.json`; plugins with local servers are ignored there.
+- Remote connectors (claude.ai web, mobile) would need a hosted server with authentication and per-user state: not planned.
 
 ## Politeness
 
@@ -193,6 +212,13 @@ Later, Claude Desktop could get an MCP Apps UI with a submit tool that only the 
 4. A **live canary** behind an env flag: runs a few real searches and saves fresh fixtures on failure.
 
 A script refreshes the fixtures from the live site and trims them.
+
+## Packaging
+
+- **Claude Desktop:** `.mcpb` Desktop Extension (`pnpm --filter spielebox-mcp pack:mcpb`). tsdown builds a second, self-contained
+  bundle (all dependencies inlined, no `node_modules`); the manifest (spec 0.3) maps `user_config` (first name, last name,
+  e-mail, phone) to the `SPIELEBOX_*` env vars. Desktop runs it with its built-in Node.
+- **Claude Code and other clients:** `node packages/mcp/dist/index.mjs` with the same env vars.
 
 ## Iterations
 

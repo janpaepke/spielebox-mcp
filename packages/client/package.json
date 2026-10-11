@@ -1,9 +1,26 @@
 {
   "name": "@janpaepke/spielebox-client",
   "version": "0.0.0",
-  "description": "Typed client for the WIENXTRA-Spielebox online catalog (opac.wienxtra.at)",
+  "description": "Unofficial typed client for the WIENXTRA-Spielebox online catalog (opac.wienxtra.at); not affiliated with WIENXTRA",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "author": "Jan Paepke (https://github.com/janpaepke)",
+  "homepage": "https://github.com/janpaepke/spielebox-mcp#readme",
+  "bugs": "https://github.com/janpaepke/spielebox-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janpaepke/spielebox-mcp.git",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "wienxtra",
+    "spielebox",
+    "board games",
+    "library",
+    "opac",
+    "vienna"
+  ],
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"

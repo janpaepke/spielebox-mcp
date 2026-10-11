@@ -1,9 +1,26 @@
 {
   "name": "spielebox-mcp",
   "version": "0.0.0",
-  "description": "MCP server for the WIENXTRA-Spielebox online catalog",
+  "description": "Unofficial MCP server for the WIENXTRA-Spielebox online catalog; not affiliated with WIENXTRA",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "author": "Jan Paepke (https://github.com/janpaepke)",
+  "homepage": "https://github.com/janpaepke/spielebox-mcp#readme",
+  "bugs": "https://github.com/janpaepke/spielebox-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janpaepke/spielebox-mcp.git",
+    "directory": "packages/mcp"
+  },
+  "keywords": [
+    "mcp",
+    "model context protocol",
+    "claude",
+    "wienxtra",
+    "spielebox",
+    "board games"
+  ],
   "bin": {
     "spielebox-mcp": "./dist/index.mjs"
   },

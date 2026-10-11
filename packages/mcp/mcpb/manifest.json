@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "spielebox",
-  "display_name": "WIENXTRA-Spielebox",
+  "display_name": "Spielebox (inoffiziell)",
   "version": "0.0.0",
-  "description": "Search the WIENXTRA-Spielebox board game library in Vienna, check availability, and send reservation requests.",
-  "long_description": "Unofficial access to the online catalog of the WIENXTRA-Spielebox (opac.wienxtra.at), Austria's largest board game library: search ~9000 games with filters for players, age and play time, see the availability of each copy, collect games on a reservation list and send it as a reservation request. Reservation requests are binding; you confirm each one yourself, in a form or on a page in your browser. Your contact details are only used to prefill that confirmation.",
+  "description": "Unofficial: search the WIENXTRA-Spielebox board game library in Vienna, check availability, and send reservation requests. Not affiliated with WIENXTRA.",
+  "long_description": "Unofficial, independent tool for the online catalog of the WIENXTRA-Spielebox (opac.wienxtra.at), Austria's largest board game library. Not affiliated with, endorsed or authorised by WIENXTRA. Search ~9000 games with filters for players, age and play time, see the availability of each copy, collect games on a reservation list and send it as a reservation request. You confirm every request yourself, in a form or on a page in your browser; your contact details are only used to prefill that confirmation and are sent only to the Spielebox.",
   "author": {
     "name": "Jan Paepke",
     "url": "https://github.com/janpaepke"
@@ -15,6 +15,7 @@
   },
   "homepage": "https://github.com/janpaepke/spielebox-mcp",
   "keywords": ["board games", "library", "vienna", "wienxtra", "spielebox"],
+  "license": "MIT",
   "server": {
     "type": "node",
     "entry_point": "server/index.mjs",
@@ -34,13 +35,34 @@
       "name": "search_games",
       "description": "Search the catalog with filters for players, age, play time and availability"
     },
-    { "name": "get_games", "description": "Full details and availability of each copy" },
-    { "name": "list_filters", "description": "Keywords, player counts, ages and play times for a search term" },
-    { "name": "list_new_games", "description": "Games recently added to the catalog" },
-    { "name": "reservation_list_add", "description": "Add games to the reservation list" },
-    { "name": "reservation_list_remove", "description": "Remove games from the reservation list" },
-    { "name": "reservation_list_show", "description": "Show the reservation list with current availability" },
-    { "name": "reservation_list_clear", "description": "Clear the reservation list" },
+    {
+      "name": "get_games",
+      "description": "Full details and availability of each copy"
+    },
+    {
+      "name": "list_filters",
+      "description": "Keywords, player counts, ages and play times for a search term"
+    },
+    {
+      "name": "list_new_games",
+      "description": "Games recently added to the catalog"
+    },
+    {
+      "name": "reservation_list_add",
+      "description": "Add games to the reservation list"
+    },
+    {
+      "name": "reservation_list_remove",
+      "description": "Remove games from the reservation list"
+    },
+    {
+      "name": "reservation_list_show",
+      "description": "Show the reservation list with current availability"
+    },
+    {
+      "name": "reservation_list_clear",
+      "description": "Clear the reservation list"
+    },
     {
       "name": "submit_reservation_request",
       "description": "Send the reservation list as a binding request, after your confirmation"
@@ -74,7 +96,9 @@
   },
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"],
-    "runtimes": { "node": ">=22.0.0" }
+    "runtimes": {
+      "node": ">=22.0.0"
+    }
   },
   "privacy_policies": []
 }
