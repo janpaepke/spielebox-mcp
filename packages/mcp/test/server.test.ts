@@ -1,16 +1,37 @@
 import { type SearchResult, SpieleboxClient, SpieleboxError, TooManyResultsError } from "@janpaepke/spielebox-client";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createMcpHandler } from "@modelcontextprotocol/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeOpac } from "../../client/test/fake-opac.ts";
+import { ConfirmationPages, ConsentGate, FormConsentChannel, UrlConsentChannel } from "../src/consent/index.ts";
 import { type CatalogClient, createServer, type ServerOptions } from "../src/server.ts";
 
 type ElicitAnswer = { action: "accept" | "decline" | "cancel"; content?: Record<string, string | boolean> };
-type ElicitHandler = (params: { message: string; requestedSchema: unknown }) => Promise<ElicitAnswer>;
+type ElicitParams = { mode?: "form" | "url"; message: string; requestedSchema?: unknown; url?: string };
+type ElicitHandler = (params: ElicitParams) => Promise<ElicitAnswer>;
+
+let pages: ConfirmationPages;
+afterEach(() => pages?.close());
+
+/** A consent gate like the production one: form first, local confirmation page as fallback. */
+function gate(waitMs = 5000): ConsentGate {
+  pages = new ConfirmationPages();
+  return new ConsentGate({ channels: [new FormConsentChannel(), new UrlConsentChannel(pages, { waitMs })] });
+}
 
 async function connect(
   catalog: CatalogClient,
-  { options, elicit, manual }: { options?: ServerOptions; elicit?: ElicitHandler; manual?: boolean } = {},
+  {
+    options = { consent: gate() },
+    elicit,
+    modes = { form: {} },
+    manual,
+  }: {
+    options?: ServerOptions;
+    elicit?: ElicitHandler;
+    modes?: { form?: Record<string, never>; url?: Record<string, never> };
+    manual?: boolean;
+  } = {},
 ): Promise<Client> {
   const handler = createMcpHandler(() => createServer(catalog, options));
   const transport = new StreamableHTTPClientTransport(new URL("http://spielebox.test/mcp"), {
@@ -21,13 +42,11 @@ async function connect(
     {
       versionNegotiation: { mode: "auto" },
       ...(manual && { inputRequired: { autoFulfill: false } }),
-      ...(elicit && { capabilities: { elicitation: { form: {} } } }),
+      ...(elicit && { capabilities: { elicitation: modes } }),
     },
   );
   if (elicit) {
-    client.setRequestHandler("elicitation/create", async (request) =>
-      elicit(request.params as { message: string; requestedSchema: unknown }),
-    );
+    client.setRequestHandler("elicitation/create", async (request) => elicit(request.params as ElicitParams));
   }
   await client.connect(transport);
   return client;
@@ -100,6 +119,12 @@ describe("spielebox MCP server", () => {
     expect(search?.inputSchema.required).toEqual(["term"]);
   });
 
+  it("only offers reservation requests with a consent gate", async () => {
+    const mcp = await connect(stub(), { options: {} });
+    const { tools } = await mcp.listTools();
+    expect(tools.map((t) => t.name)).not.toContain("submit_reservation_request");
+  });
+
   it("relays arguments to the client and returns structured content", async () => {
     const catalog = stub();
     const mcp = await connect(catalog);
@@ -170,9 +195,9 @@ describe("submit_reservation_request", () => {
 
   it("asks the user with the exact games and the order form's wording, then submits what they confirmed", async () => {
     const catalog = listed();
-    const prompts: { message: string; requestedSchema: unknown }[] = [];
+    const prompts: ElicitParams[] = [];
     const mcp = await connect(catalog, {
-      options: { contact: { firstName: "Erika", email: "erika@example.org" } },
+      options: { consent: gate(), contact: { firstName: "Erika", email: "erika@example.org" } },
       elicit: async (params) => {
         prompts.push(params);
         return { action: "accept", content: { ...contact, confirm: true } };
@@ -238,7 +263,10 @@ describe("submit_reservation_request", () => {
     const mcp = await connect(catalog, {
       elicit: async () => ({ action: "accept", content: { ...contact, email: "nope", confirm: true } }),
     });
-    expect((await call(mcp)).isError).toBe(true);
+    expect((await call(mcp)).structuredContent).toMatchObject({
+      sent: false,
+      reason: expect.stringMatching(/contact/),
+    });
     expect(catalog.submitReservationRequest).not.toHaveBeenCalled();
   });
 
@@ -254,6 +282,69 @@ describe("submit_reservation_request", () => {
     expect(result.structuredContent).toMatchObject({ sent: true, request: { titles: ["CATAN Connect"] } });
     expect(opac.orders).toHaveLength(1);
     expect(opac.orders[0]?.get("email")).toBe(contact.email);
+  });
+
+  describe("in a client without forms (URL mode, e.g. Claude Desktop)", () => {
+    /** Plays the user in the browser: opens the page and submits it, shortly after the client returned. */
+    const browser = (fields: Record<string, string>) => async (params: ElicitParams) => {
+      expect(params.mode).toBe("url");
+      const url = params.url ?? "";
+      setTimeout(async () => {
+        const page = await fetch(url);
+        expect(await page.text()).toContain("CATAN Connect");
+        await fetch(url, {
+          method: "POST",
+          headers: { origin: new URL(url).origin, "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams(fields),
+        });
+      }, 20);
+      return { action: "accept" as const };
+    };
+
+    it("waits for the confirmation page and submits what was entered there", async () => {
+      const catalog = listed();
+      const mcp = await connect(catalog, {
+        modes: { url: {} },
+        elicit: browser({ ...contact, confirm: "yes", action: "confirm" }),
+      });
+      const result = await call(mcp);
+      expect(result.structuredContent).toEqual({ sent: true, request: SENT });
+      expect(catalog.submitReservationRequest).toHaveBeenCalledWith({ contact, ids: [LISTED.items[0]?.id] });
+    });
+
+    it("sends nothing when the user cancels on the page", async () => {
+      const catalog = listed();
+      const mcp = await connect(catalog, { modes: { url: {} }, elicit: browser({ action: "decline" }) });
+      expect((await call(mcp)).structuredContent).toMatchObject({ sent: false });
+      expect(catalog.submitReservationRequest).not.toHaveBeenCalled();
+    });
+
+    it("sends nothing when the user doesn't open the page", async () => {
+      const catalog = listed();
+      const mcp = await connect(catalog, { modes: { url: {} }, elicit: async () => ({ action: "decline" }) });
+      expect((await call(mcp)).structuredContent).toMatchObject({ sent: false });
+      expect(catalog.submitReservationRequest).not.toHaveBeenCalled();
+    });
+
+    it("gives up when the page isn't answered in time", async () => {
+      const catalog = listed();
+      const mcp = await connect(catalog, {
+        options: { consent: gate(50) },
+        modes: { url: {} },
+        elicit: async () => ({ action: "accept" }),
+      });
+      expect((await call(mcp)).structuredContent).toMatchObject({
+        sent: false,
+        reason: expect.stringMatching(/in time/),
+      });
+      expect(catalog.submitReservationRequest).not.toHaveBeenCalled();
+    });
+
+    it("prefers the form when the client supports both", async () => {
+      const elicit = vi.fn<ElicitHandler>(async () => ({ action: "decline" }));
+      await call(await connect(listed(), { modes: { form: {}, url: {} }, elicit }));
+      expect(elicit.mock.calls[0]?.[0]).not.toHaveProperty("url");
+    });
   });
 
   describe("against a misbehaving client", () => {

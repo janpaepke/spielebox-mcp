@@ -1,6 +1,5 @@
-import { randomBytes, randomUUID } from "node:crypto";
 import {
-  Contact,
+  type Contact,
   Filters,
   GetGamesParams,
   GetGamesResult,
@@ -13,17 +12,10 @@ import {
   type SpieleboxClient,
   SpieleboxError,
 } from "@janpaepke/spielebox-client";
-import {
-  acceptedContent,
-  type CallToolResult,
-  createRequestStateCodec,
-  type InputRequiredResult,
-  inputRequired,
-  inputResponse,
-  McpServer,
-} from "@modelcontextprotocol/server";
+import { type CallToolResult, type InputRequiredResult, McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod";
 import pkg from "../package.json" with { type: "json" };
+import { type ConsentGate, elicitationModes } from "./consent/gate.ts";
 
 /** The client methods the server relays to. */
 export type CatalogClient = Pick<
@@ -41,10 +33,13 @@ export type CatalogClient = Pick<
 >;
 
 export type ServerOptions = {
-  /** Defaults for the contact fields of the reservation consent form (e.g. from env). */
+  /**
+   * Obtains the user's consent for reservation requests. Must be shared by all server instances of a process.
+   * Without it, `submit_reservation_request` isn't offered.
+   */
+  consent?: ConsentGate;
+  /** Defaults for the contact fields shown in the consent step (e.g. from env). */
   contact?: Partial<Contact>;
-  /** HMAC key for the consent round trip (≥ 32 bytes). Defaults to a random per-process key; set it when several processes serve one client. */
-  stateKey?: Uint8Array;
 };
 
 const INSTRUCTIONS = `Tools for the WIENXTRA-Spielebox in Vienna, Austria's largest board game library (~9000 games, lent for free or a small fee).
@@ -54,15 +49,11 @@ Catalog data is German. Typical flow: search_games (or list_new_games) → get_g
 - Availability changes often; every result has an asOf time. Game ids are only valid for this server instance after a search found them.
 - onlineReservationRequired: the game must be reserved online before pickup.
 - The reservation list stages games for a reservation request (the catalog's "Merkliste"); it lives in this server's memory.
-- submit_reservation_request sends the list to the Spielebox. It is binding for the user, so it always asks the user to confirm in a form; never call it without the user asking for it. Success means "request sent": the staff confirm by e-mail when the games are ready.`;
+- submit_reservation_request sends the list to the Spielebox. It is binding for the user, so it always asks the user to confirm (in a form, or on a page in the browser); never call it without the user asking for it. Success means "request sent": the staff confirm by e-mail when the games are ready.`;
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 /** Changes only the in-memory reservation list, never the catalog. */
 const LOCAL_CHANGE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-
-/** Wording of the checkbox on the catalog's order form; the request is sent with it ticked. */
-const ORDER_FORM_CONSENT =
-  "Ich stimme bis auf Widerruf der Verwendung meiner bekannt gegebenen Daten zum Zweck der Zusendung von Informationen über Angebote des Vereins wienXtra zu.";
 
 /** Result of submit_reservation_request: either the request was sent, or why nothing was sent. */
 const SubmitOutcome = z.object({
@@ -71,28 +62,13 @@ const SubmitOutcome = z.object({
   request: ReservationRequestResult.optional(),
 });
 
-/** What the consent round trip carries: the games the user was shown, and a single-use nonce. Signed, no personal data. */
-type ConsentState = { ids: string[]; nonce: string };
-
-/**
- * Process-wide, because the SDK may build a server instance per request (stateless protocol): the consent round trip
- * spans two requests, so its key and the record of used nonces must outlive any single instance.
- */
-const PROCESS_STATE_KEY = randomBytes(32);
-const usedNonces = new Map<string, number>();
-
 /** Builds the MCP server. Each tool validates with the client's schemas and relays to one client method. */
 export function createServer(client: CatalogClient, options: ServerOptions = {}): McpServer {
-  const stateCodec = createRequestStateCodec<ConsentState>({
-    key: options.stateKey ?? PROCESS_STATE_KEY,
-    ttlSeconds: 300,
-    bind: (ctx) => ctx.mcpReq.method,
-  });
+  const { consent, contact = {} } = options;
   const server = new McpServer(
     { name: "spielebox", version: pkg.version },
-    { instructions: INSTRUCTIONS, requestState: { verify: stateCodec.verify } },
+    { instructions: INSTRUCTIONS, ...(consent && { requestState: { verify: consent.verify } }) },
   );
-  const consentForm = consentFormSchema(options.contact ?? {});
 
   server.registerTool(
     "search_games",
@@ -192,95 +168,54 @@ export function createServer(client: CatalogClient, options: ServerOptions = {})
     () => relay(() => client.clearReservationList()),
   );
 
+  if (!consent) return server;
+
   server.registerTool(
     "submit_reservation_request",
     {
       title: "Submit reservation request",
       description:
-        "Send the reservation list to the Spielebox as a binding reservation request. Always shows the user a confirmation form " +
-        "(games, contact data) first; nothing is sent without their explicit confirmation. Only call when the user asks to reserve.",
+        "Send the reservation list to the Spielebox as a binding reservation request. Always asks the user to confirm first " +
+        "(games, contact data), in a form or on a page in the browser; nothing is sent without their explicit confirmation. " +
+        "Only call when the user asks to reserve.",
       inputSchema: z.object({}),
       outputSchema: SubmitOutcome,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       _meta: { "anthropic/requiresUserInteraction": true },
     },
     async (_args, ctx): Promise<CallToolResult | InputRequiredResult> => {
-      const state = ctx.mcpReq.requestState<ConsentState>();
-      const answer = inputResponse(ctx.mcpReq.inputResponses, "consent");
-
-      // Round 1: show the user exactly what would be sent and ask for confirmation.
-      if (!state || answer.kind !== "elicit") {
+      const supported = elicitationModes(ctx, server.server.getClientCapabilities());
+      const round = await consent.run(ctx, supported, async () => {
         let list: ReservationList;
         try {
           list = await client.prepareReservationRequest();
         } catch (error) {
-          return errorResult(error);
+          return { stop: errorResult(error) };
         }
-        if (!list.items.length)
-          return toolError("The reservation list is empty; add games with reservation_list_add first.");
+        if (!list.items.length) {
+          return { stop: toolError("The reservation list is empty; add games with reservation_list_add first.") };
+        }
         const unavailable = list.items.filter((i) => i.availability !== "available");
         if (unavailable.length) {
-          return toolError(
-            `Not available right now: ${unavailable.map((i) => i.title).join(", ")}. Remove them from the reservation list first.`,
-          );
+          const titles = unavailable.map((i) => i.title).join(", ");
+          return {
+            stop: toolError(`Not available right now: ${titles}. Remove them from the reservation list first.`),
+          };
         }
-        const titles = list.items.map((i) => `• ${i.title}`).join("\n");
-        return inputRequired({
-          inputRequests: {
-            consent: inputRequired.elicit({
-              message:
-                `Verbindliche Vorbestellung bei der WIENXTRA-Spielebox:\n${titles}\n\n` +
-                "Die Spielebox bestätigt per E-Mail, wenn die Spiele bereit sind. Bestellung mindestens einen Tag vor der " +
-                "Abholung; abholen innerhalb weniger Werktage.\n\n" +
-                `Mit dem Absenden wird im Formular der Spielebox bestätigt: „${ORDER_FORM_CONSENT}“`,
-              requestedSchema: consentForm,
-            }),
-          },
-          requestState: await stateCodec.mint({ ids: list.items.map((i) => i.id), nonce: randomUUID() }, ctx),
-        });
-      }
-
-      // Round 2: the state is verified (signature, expiry) by the SDK before we get here.
-      const now = Date.now();
-      for (const [nonce, expires] of usedNonces) if (expires < now) usedNonces.delete(nonce);
-      if (usedNonces.has(state.nonce)) return toolError("This confirmation was already used; call the tool again.");
-      usedNonces.set(state.nonce, now + 10 * 60_000);
-
-      if (answer.action !== "accept")
-        return notSent(`The user ${answer.action === "decline" ? "declined" : "cancelled"}.`);
-      const consent = acceptedContent(ctx.mcpReq.inputResponses, "consent", consentForm);
-      if (!consent?.confirm) return notSent("The user did not tick the confirmation box.");
-
-      const contact = Contact.safeParse({
-        firstName: consent.firstName,
-        lastName: consent.lastName,
-        email: consent.email,
-        phone: consent.phone || undefined,
+        return { ask: { ids: list.items.map((i) => i.id), titles: list.items.map((i) => i.title), contact } };
       });
-      if (!contact.success)
-        return toolError(`Invalid contact data, nothing was sent: ${z.prettifyError(contact.error)}`);
+      if (round.status !== "decided") return round.result;
+      if (!round.outcome.granted) return notSent(round.outcome.reason);
+      const confirmed = round.outcome.contact;
+      // The client sends only if the list is still exactly what the user confirmed (checked atomically).
       return relay(async () => ({
         sent: true,
-        // The client sends only if the list is still exactly what the user confirmed (checked atomically).
-        request: await client.submitReservationRequest({ contact: contact.data, ids: state.ids }),
+        request: await client.submitReservationRequest({ contact: confirmed, ids: round.ids }),
       }));
     },
   );
 
   return server;
-}
-
-/** The consent form: a required confirmation plus the contact fields of the catalog's order form, prefilled. */
-function consentFormSchema(defaults: Partial<Contact>) {
-  const text = (title: string, value: string | undefined) =>
-    value ? z.string().meta({ title }).default(value) : z.string().meta({ title });
-  return z.object({
-    confirm: z.boolean().meta({ title: "Ja, verbindlich vorbestellen" }).default(false),
-    firstName: text("Vorname", defaults.firstName),
-    lastName: text("Nachname", defaults.lastName),
-    email: text("E-Mail", defaults.email),
-    phone: text("Telefon (optional)", defaults.phone).optional(),
-  });
 }
 
 function toolError(text: string): CallToolResult {

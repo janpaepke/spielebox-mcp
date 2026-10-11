@@ -14,7 +14,8 @@
     "build": "tsdown",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json",
-    "start": "node dist/index.mjs"
+    "start": "node dist/index.mjs",
+    "pack:mcpb": "pnpm build && node scripts/pack-mcpb.ts"
   },
   "dependencies": {
     "@janpaepke/spielebox-client": "workspace:*",
@@ -22,6 +23,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
     "@modelcontextprotocol/client": "^2.3.1"
   }
 }
