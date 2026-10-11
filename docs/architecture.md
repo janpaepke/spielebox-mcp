@@ -223,6 +223,12 @@ A script refreshes the fixtures from the live site and trims them.
   takes `.mcpb` submissions). The MCP layer (`updates.ts`, distribution concern, not in the client) asks GitHub for the latest
   release once per process, lazily at the first tool call, and appends a one-time note to a tool result; the server instructions
   ask the model to pass it on. Off via `SPIELEBOX_CHECK_UPDATES=false` (`user_config.check_updates`, "Nach Updates suchen", in the extension).
+- Updating (verified with Claude Desktop 2.31226.1, 2026-10-11): double-clicking a `.mcpb` with a **higher** `version` offers
+  "Aktualisieren"/"Update" (the same version only offers uninstall), and saved `user_config` values survive the update. So every
+  build meant for users needs a version bump.
+- Install warning: Desktop shows "Installing will grant this extension access to everything on your computer…" for **every**
+  extension installed from a file (condition `onDiskPath` in its UI code), independent of manifest, permissions or signature.
+  MCPB has no permission model to request less; only directory installs avoid it, and the directory no longer takes `.mcpb`.
 - Known Claude Desktop issue: `.mcpb` files show a blank icon in Finder because Desktop registers the type with a `dxt.icns` it
   doesn't ship ([mcpb#302](https://github.com/modelcontextprotocol/mcpb/issues/302)). Not fixable from the bundle side.
 
