@@ -1,4 +1,4 @@
-export { SpieleboxClient, type SpieleboxClientOptions } from "./client.ts";
+export { RESERVATION_LIST_MAX, SpieleboxClient, type SpieleboxClientOptions } from "./client.ts";
 export {
   HttpError,
   MarkupChangedError,

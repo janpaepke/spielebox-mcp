@@ -53,7 +53,9 @@ export class FakeOpac {
     if (media) {
       const term = this.#sessions.get(session) ?? "";
       const inSet = RESULT_SETS[term]?.includes(media);
-      return inSet && DETAILS[media] ? fixture(DETAILS[media]) : fixture("detail-not-in-session.html");
+      // Ids without their own fixture get a stand-in detail page; the parser takes the id from the request anyway.
+      if (!inSet) return fixture("detail-not-in-session.html");
+      return fixture(DETAILS[media] ?? "detail-galaxy-trucker.html");
     }
     if (p.get("newmedia")) {
       this.#sessions.set(session, "new");

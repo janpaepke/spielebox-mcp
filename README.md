@@ -10,7 +10,7 @@ The catalog has no API, so the client scrapes its server-rendered HTML. The MCP 
 | [`packages/client`](packages/client) (`@janpaepke/spielebox-client`) | Search, game details and availability. Later also the reservation list and reservation requests. No MCP dependency. |
 | [`packages/mcp`](packages/mcp) (`spielebox-mcp`) | MCP stdio server exposing the client as tools. |
 
-Status: v0.1, read-only (search, filters, details, new games). See [docs/architecture.md](docs/architecture.md) for the design and
+Status: v0.2: search, filters, details, new games and a local reservation list. Submitting reservation requests is not implemented yet. See [docs/architecture.md](docs/architecture.md) for the design and
 [docs/opac-research.md](docs/opac-research.md) for how the OPAC works.
 
 ## Use with Claude Code
@@ -22,7 +22,8 @@ pnpm install && pnpm build
 claude mcp add spielebox -- node "$(pwd)/packages/mcp/dist/index.mjs"
 ```
 
-Tools: `search_games`, `get_games`, `list_filters`, `list_new_games`. All of them are read-only.
+Tools: `search_games`, `get_games`, `list_filters`, `list_new_games`, and `reservation_list_add` / `_remove` / `_show` / `_clear`.
+None of them changes anything on the catalog: the reservation list lives in the server's memory.
 
 ## Development
 

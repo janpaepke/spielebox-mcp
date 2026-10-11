@@ -121,3 +121,30 @@ export const GetGamesResult = z.object({
     .describe("Ids that couldn't be resolved, with the reason"),
 });
 export type GetGamesResult = z.infer<typeof GetGamesResult>;
+
+/**
+ * Reservation list: games staged for the next reservation request (the site's "Merkliste").
+ * Kept in the client's memory, not on the site, until a request is submitted.
+ */
+export const ReservationListItem = GameDetails.pick({
+  id: true,
+  title: true,
+  availability: true,
+  availableCopies: true,
+  onlineReservationRequired: true,
+});
+export type ReservationListItem = z.infer<typeof ReservationListItem>;
+
+export const ReservationList = z.object({
+  items: z.array(ReservationListItem).describe("In the order they were added"),
+  notFound: z
+    .array(z.object({ id: z.string(), reason: z.string() }))
+    .describe("Ids that couldn't be resolved; they were not added (or, if listed, are kept but couldn't be refreshed)"),
+  asOf: z.iso.datetime(),
+});
+export type ReservationList = z.infer<typeof ReservationList>;
+
+export const ReservationListChange = z.object({
+  ids: z.array(MediaId).min(1).max(20).describe("Game ids from search results"),
+});
+export type ReservationListChange = z.input<typeof ReservationListChange>;

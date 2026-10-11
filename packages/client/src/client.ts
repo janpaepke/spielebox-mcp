@@ -1,6 +1,6 @@
 import { LRUCache } from "lru-cache";
 import pkg from "../package.json" with { type: "json" };
-import { MarkupChangedError } from "./errors.ts";
+import { MarkupChangedError, SpieleboxError } from "./errors.ts";
 import { Mutex } from "./mutex.ts";
 import { PAGE_SIZE, SORT_IDS } from "./opac.ts";
 import { parseDetailPage } from "./parse/detail.ts";
@@ -16,6 +16,9 @@ import {
   type GetGamesResult,
   type NewGamesParams,
   NewGamesParams as NewGamesParamsSchema,
+  type ReservationList,
+  type ReservationListChange,
+  ReservationListChange as ReservationListChangeSchema,
   type SearchParams,
   SearchParams as SearchParamsSchema,
   type SearchResult,
@@ -36,6 +39,9 @@ type Query = Record<string, string>;
 
 const DAY_MS = 24 * 60 * 60_000;
 
+/** Upper bound for the reservation list; only there to keep memory bounded. */
+export const RESERVATION_LIST_MAX = 30;
+
 /**
  * Client for the WIENXTRA-Spielebox online catalog.
  *
@@ -52,6 +58,9 @@ export class SpieleboxClient {
   #session = { generation: -1, key: "", ids: new Set<string>() };
 
   readonly #locators = new LRUCache<string, Locator>({ max: 2000 });
+  /** Reservation list: ids in insertion order. Their locators are pinned (see #pin) so they stay resolvable. */
+  readonly #reservationList = new Set<string>();
+  readonly #pinnedLocators = new Map<string, Locator>();
   readonly #details: LRUCache<string, GameDetails>;
   readonly #searches: LRUCache<string, SearchResult>;
   /** Keyword label (lowercase) → `cwid`. Ids change on catalog imports, so they expire and are refreshed on mismatch. */
@@ -117,6 +126,69 @@ export class SpieleboxClient {
     return this.#lock.run(() =>
       this.#pagedResults({ newmedia: "true", newsearch: "true" }, "new", { kind: "new" }, "neue Medien", limit, offset),
     );
+  }
+
+  /** Adds games to the reservation list. Only games the client has seen in results can be added. */
+  async addToReservationList(params: ReservationListChange): Promise<ReservationList> {
+    const { ids } = ReservationListChangeSchema.parse(params);
+    return this.#lock.run(async () => {
+      this.#http.dropIdleSession();
+      const fresh = [...new Set(ids)].filter((id) => !this.#reservationList.has(id));
+      if (this.#reservationList.size + fresh.length > RESERVATION_LIST_MAX) {
+        throw new SpieleboxError(
+          "RESERVATION_LIST_FULL",
+          `The reservation list holds at most ${RESERVATION_LIST_MAX} games`,
+        );
+      }
+      const { games, notFound } = await this.#getGames(fresh);
+      for (const game of games) {
+        this.#reservationList.add(game.id);
+        const locator = this.#locators.get(game.id);
+        if (locator) this.#pinnedLocators.set(game.id, locator);
+      }
+      return this.#describeReservationList(notFound);
+    });
+  }
+
+  /** Removes games from the reservation list. Ids that aren't on it are ignored. */
+  async removeFromReservationList(params: ReservationListChange): Promise<ReservationList> {
+    const { ids } = ReservationListChangeSchema.parse(params);
+    return this.#lock.run(async () => {
+      for (const id of ids) {
+        this.#reservationList.delete(id);
+        this.#pinnedLocators.delete(id);
+      }
+      return this.#describeReservationList([]);
+    });
+  }
+
+  async clearReservationList(): Promise<ReservationList> {
+    return this.#lock.run(async () => {
+      this.#reservationList.clear();
+      this.#pinnedLocators.clear();
+      return this.#describeReservationList([]);
+    });
+  }
+
+  /** The reservation list with current availability. */
+  async getReservationList(): Promise<ReservationList> {
+    return this.#lock.run(() => {
+      this.#http.dropIdleSession();
+      return this.#describeReservationList([]);
+    });
+  }
+
+  async #describeReservationList(notFound: ReservationList["notFound"]): Promise<ReservationList> {
+    const ids = [...this.#reservationList];
+    const details = ids.length ? await this.#getGames(ids) : { games: [], notFound: [] };
+    const items = details.games.map(({ id, title, availability, availableCopies, onlineReservationRequired }) => ({
+      id,
+      title,
+      availability,
+      availableCopies,
+      onlineReservationRequired,
+    }));
+    return { items, notFound: [...notFound, ...details.notFound], asOf: new Date(this.#now()).toISOString() };
   }
 
   async #search(p: ReturnType<typeof SearchParamsSchema.parse>, retryStaleKeyword: boolean): Promise<SearchResult> {
@@ -250,7 +322,7 @@ export class SpieleboxClient {
     // 2) Replay the search that found them, one search per locator.
     const groups = new Map<string, { locator: Locator; ids: string[] }>();
     for (const id of [...pending.filter((i) => !inSession.has(i)), ...retry]) {
-      const locator = this.#locators.get(id);
+      const locator = this.#locators.get(id) ?? this.#pinnedLocators.get(id);
       if (!locator) {
         notFound.push({ id, reason: "Unknown id: search for the game first" });
         continue;

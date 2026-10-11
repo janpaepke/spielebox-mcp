@@ -16,6 +16,7 @@ async function connect(catalog: CatalogClient): Promise<Client> {
 }
 
 const EMPTY: SearchResult = { total: 0, offset: 0, games: [], asOf: "2026-10-11T12:00:00.000Z" };
+const EMPTY_LIST = { items: [], notFound: [], asOf: "2026-10-11T12:00:00.000Z" };
 
 function stub(overrides: Partial<CatalogClient> = {}): CatalogClient {
   return {
@@ -31,17 +32,32 @@ function stub(overrides: Partial<CatalogClient> = {}): CatalogClient {
       years: [],
     })),
     newGames: vi.fn(async () => EMPTY),
+    addToReservationList: vi.fn(async () => EMPTY_LIST),
+    removeFromReservationList: vi.fn(async () => EMPTY_LIST),
+    clearReservationList: vi.fn(async () => EMPTY_LIST),
+    getReservationList: vi.fn(async () => EMPTY_LIST),
     ...overrides,
   };
 }
 
 describe("spielebox MCP server", () => {
-  it("lists the read-only tools with schemas and annotations", async () => {
+  it("lists the tools with schemas and annotations", async () => {
     const mcp = await connect(stub());
     const { tools } = await mcp.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(["get_games", "list_filters", "list_new_games", "search_games"]);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      "get_games",
+      "list_filters",
+      "list_new_games",
+      "reservation_list_add",
+      "reservation_list_clear",
+      "reservation_list_remove",
+      "reservation_list_show",
+      "search_games",
+    ]);
+    const writing = tools.filter((t) => !t.annotations?.readOnlyHint).map((t) => t.name);
+    expect(writing.sort()).toEqual(["reservation_list_add", "reservation_list_clear", "reservation_list_remove"]);
+    expect(tools.find((t) => t.name === "reservation_list_clear")?.annotations?.destructiveHint).toBe(true);
     for (const tool of tools) {
-      expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
       expect(tool.outputSchema).toBeDefined();
       expect((tool.description ?? "").length).toBeLessThan(2048);
     }
@@ -71,6 +87,19 @@ describe("spielebox MCP server", () => {
     const result = await mcp.callTool({ name: "search_games", arguments: { term: "ab" } });
     expect(result.isError).toBe(true);
     expect(catalog.search).not.toHaveBeenCalled();
+  });
+
+  it("manages the reservation list end to end", async () => {
+    const opac = new FakeOpac();
+    const mcp = await connect(new SpieleboxClient({ fetch: opac.fetch, minIntervalMs: 0 }));
+    const search = await mcp.callTool({ name: "search_games", arguments: { term: "catan", limit: 2 } });
+    const ids = (search.structuredContent as SearchResult).games.map((g) => g.id);
+    await mcp.callTool({ name: "reservation_list_add", arguments: { ids } });
+    await mcp.callTool({ name: "reservation_list_remove", arguments: { ids: [ids[0]] } });
+    const shown = await mcp.callTool({ name: "reservation_list_show", arguments: {} });
+    expect(shown.structuredContent).toMatchObject({ items: [{ id: ids[1] }], notFound: [] });
+    const cleared = await mcp.callTool({ name: "reservation_list_clear", arguments: {} });
+    expect(cleared.structuredContent).toMatchObject({ items: [] });
   });
 
   it("works end to end with the real client", async () => {
