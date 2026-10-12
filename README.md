@@ -10,11 +10,24 @@ check what's available right now, and send a reservation request for pickup.
 
 ## What you can ask
 
+Ask in any language: the catalog is in German, and the assistant turns your request into German searches. A few examples:
+
+- *„Welche kooperativen Spiele für 4 Personen, geeignet für ein 10-jähriges Kind, sind in der Spielebox gerade verfügbar?“*
+- *„Ist Flügelschlag verfügbar? Wie viele Exemplare gibt es?“*
+- *„Was gibt's Neues in der Spielebox?“*
+- *„Zeig mir die Spielebox-Seite von Flügelschlag.“*
+- *„Setz Planet Unknown und Colt Express auf meine Reservierungsliste und reservier sie.“*
+
+<details>
+<summary>In English</summary>
+
 - *"Which cooperative games for 4 players, suitable for a 10-year-old, are available at the Spielebox right now?"*
 - *"Is Flügelschlag available? How many copies?"*
 - *"What's new at the Spielebox?"*
 - *"Show me the Spielebox page of Flügelschlag."*
 - *"Put Planet Unknown and Colt Express on my reservation list and reserve them."*
+
+</details>
 
 The assistant searches the catalog, filters by players, age, play time and availability, looks up the status of each copy, and
 can collect games on a reservation list. Reserving always asks you first (see [Reservation requests](#reservation-requests)).
